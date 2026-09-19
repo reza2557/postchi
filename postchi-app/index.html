@@ -592,8 +592,19 @@ async function searchPlace(term, bias){
 // order — e.g. "فارس، شیراز، صدرا، مولانا سه" resolves فارس, then narrows to
 // شیراز near that, then narrows to صدرا near that, then finally searches
 // "مولانا سه" right around صدرا instead of scanning the whole province.
+// When there's no comma at all (dictation without reliable pause detection),
+// fall back to the same drill-down using plain words instead: everything
+// except the last two words is treated as the locality chain, and the last
+// two words as the specific place — Persian addresses are almost always
+// broad-to-narrow, ending in a short street/complex name.
 async function hierarchicalGeocode(rawText, startLoc){
-  const parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  let parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  if(parts.length < 2){
+    const words = rawText.split(/\s+/).filter(Boolean);
+    if(words.length > 2){
+      parts = [...words.slice(0, -2), words.slice(-2).join(' ')];
+    }
+  }
   let bias = startLoc || null;
   let localityRadiusKm = 40; // wide default until we lock onto a confident locality
   for(let i=0; i<parts.length-1; i++){
@@ -845,6 +856,13 @@ function startScanMic(){
   let finished = false;
   const finishOnce = ()=>{
     if(finished) return;
+    if(scanPressActive){
+      // The browser cut recognition off on its own (silence/max-duration
+      // timeout) while the finger is still on the button — keep listening
+      // instead of ending, since the driver hasn't released yet.
+      setTimeout(()=>{ try{ startRecognizer(scanRec); }catch(e){} }, 0);
+      return;
+    }
     finished = true;
     scanListening = false;
     $('mic-visual').classList.remove('listening');
@@ -1078,6 +1096,10 @@ function startRescanMic(){
   let finished = false;
   const finishOnce = ()=>{
     if(finished) return;
+    if(rescanPressActive){
+      setTimeout(()=>{ try{ startRecognizer(rescanRec); }catch(e){} }, 0);
+      return;
+    }
     finished = true;
     rescanListening = false;
     $('rescan-mic-visual').classList.remove('listening');
