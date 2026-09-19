@@ -702,31 +702,53 @@ function createRecognizer(onUpdate, onEnd, onError){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SR();
   rec.lang = 'fa-IR';
-  // Push-to-talk now controls start/stop directly (finger down = listening,
-  // finger up = stop), so continuous mode is safe here — nothing auto-restarts,
-  // which is what caused the repeated "ding" before. Continuous mode also means
-  // each pause the driver makes mid-address becomes its own separate final
-  // result, which we turn into a comma below (see onresult).
+  // Push-to-talk controls start/stop directly (finger down = listening,
+  // finger up = stop), so continuous mode is safe here — nothing auto-restarts.
   rec.continuous = true;
   rec.interimResults = true;
   rec.maxAlternatives = 1;
+  let accumulated = '';
+  let processedFinals = 0;
   rec.onresult = (e)=>{
-    const finalParts = [];
-    let interim = '';
-    for(let i=0; i<e.results.length; i++){
-      const t = e.results[i][0].transcript.trim();
-      if(e.results[i].isFinal){ if(t) finalParts.push(t); }
-      else interim = t;
+    // Devices differ in how they report finalized speech: some send one
+    // fresh phrase per pause, others (like this) re-send the WHOLE growing
+    // sentence from the start every time. Handle both without duplicating:
+    // if a new final segment already contains everything captured so far,
+    // it's the cumulative kind — just replace; otherwise it's a genuinely
+    // new phrase — append it with a comma.
+    for(let i=processedFinals; i<e.results.length; i++){
+      if(e.results[i].isFinal){
+        const seg = e.results[i][0].transcript.trim();
+        if(seg){
+          if(accumulated && seg.indexOf(accumulated) === 0){
+            accumulated = seg;
+          } else if(!(accumulated && accumulated.indexOf(seg) === 0)){
+            accumulated = accumulated ? (accumulated + '، ' + seg) : seg;
+          }
+        }
+        processedFinals = i + 1;
+      }
     }
-    // Every completed (paused-after) phrase becomes its own comma-separated
-    // part — so "شیراز (مکث) صدرا (مکث) مولانا سه" becomes
-    // "شیراز، صدرا، مولانا سه", which feeds straight into the hierarchical
-    // address search below.
-    onUpdate(finalParts.join('، '), interim);
+    let interim = '';
+    if(e.results.length && !e.results[e.results.length-1].isFinal){
+      interim = e.results[e.results.length-1][0].transcript.trim();
+    }
+    onUpdate(accumulated, interim);
   };
   rec.onerror = (e)=>{ onError && onError(e.error); };
   rec.onend = ()=>{ onEnd && onEnd(); };
   return rec;
+}
+
+// Extra safety net regardless of device behavior: let the driver say
+// "ویرگول"/"کاما" out loud to force a separator, and collapse any leftover
+// immediate word repeats.
+function cleanupSpeechText(text){
+  if(!text) return text;
+  text = text.replace(/\s*(ویرگول|کاما)\s*/g, '، ');
+  text = text.replace(/(\S+)(\s+\1\b)+/g, '$1');
+  text = text.replace(/\s*،\s*/g, '، ').replace(/\s+/g, ' ').trim();
+  return text;
 }
 
 // Joins two chunks of dictated text with exactly one space, so building an
@@ -827,7 +849,7 @@ function startScanMic(){
     scanListening = false;
     $('mic-visual').classList.remove('listening');
     if(utterance.trim()){
-      scanAccumulated = joinSpeech(scanAccumulated, utterance);
+      scanAccumulated = joinSpeech(scanAccumulated, cleanupSpeechText(utterance));
       goToScanEdit(scanAccumulated);
     } else {
       resetScanVoiceUI(scanAccumulated);
@@ -1059,7 +1081,7 @@ function startRescanMic(){
     finished = true;
     rescanListening = false;
     $('rescan-mic-visual').classList.remove('listening');
-    if(utterance.trim()) matchSpokenAddress(utterance.trim());
+    if(utterance.trim()) matchSpokenAddress(cleanupSpeechText(utterance));
     else resetRescanVoiceUI();
   };
   rescanRec = createRecognizer(
