@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>مرتب سازی بسته های پستچی</title>
-<meta name="theme-color" content="#2F6F5E">
+<meta name="theme-color" content="#12100D">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -12,17 +12,17 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root{
-  --paper:#EDE9DE;
-  --ink:#1F2A24;
-  --ink-soft:#4b5750;
-  --primary:#2F6F5E;
-  --primary-dark:#20463b;
-  --accent:#C97A2B;
-  --accent-dark:#a5611f;
-  --success:#3A7D44;
-  --danger:#B23A32;
-  --surface:#FFFFFF;
-  --border:#d8d2c2;
+  --paper:#12100D;
+  --ink:#EFE9DE;
+  --ink-soft:#9C9385;
+  --primary:#3E8E76;
+  --primary-dark:#2F6F5E;
+  --accent:#E0973F;
+  --accent-dark:#C97A2B;
+  --success:#4C9A56;
+  --danger:#D9564C;
+  --surface:#1C1A16;
+  --border:#332F28;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -160,9 +160,25 @@ textarea{min-height:90px;line-height:1.8;}
 }
 .shutter:active{background:var(--paper);}
 
+.mic-circle{
+  width:92px;height:92px;border-radius:50%;
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:2.3rem;margin:0 auto;
+}
+.mic-circle.listening{
+  background:var(--danger);
+  animation:mic-pulse 1.3s infinite;
+}
+@keyframes mic-pulse{
+  0%{box-shadow:0 0 0 0 rgba(217,86,76,.55);}
+  70%{box-shadow:0 0 0 22px rgba(217,86,76,0);}
+  100%{box-shadow:0 0 0 0 rgba(217,86,76,0);}
+}
+
 .map-thumb{
   width:100%;height:170px;border-radius:10px;overflow:hidden;
-  border:1px solid var(--border);margin-bottom:12px;background:#e4e0d3;
+  border:1px solid var(--border);margin-bottom:12px;background:#221f1a;
 }
 
 .result-item{
@@ -198,7 +214,7 @@ textarea{min-height:90px;line-height:1.8;}
 .footer-credit{
   text-align:center;
   font-size:.68rem;
-  color:#8a8577;
+  color:#6b665a;
   padding:16px 20px 22px;
   letter-spacing:.2px;
 }
@@ -234,7 +250,7 @@ a{color:var(--primary);}
 
 .toast{
   position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
-  background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;
+  background:#000;color:#fff;padding:10px 18px;border-radius:8px;border:1px solid #333;
   font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .25s;
   z-index:50; max-width:90%; text-align:center;
 }
@@ -285,7 +301,7 @@ a{color:var(--primary);}
         <div class="stat"><div class="num" id="stat-status">—</div><div class="label">وضعیت مسیر</div></div>
       </div>
 
-      <button class="btn btn-primary" id="btn-new-scan">📷 شروع اسکن آدرس جدید</button>
+      <button class="btn btn-primary" id="btn-new-scan">🎤 افزودن آدرس جدید با صدا</button>
       <button class="btn btn-accent" id="btn-sort" disabled>🧭 مرتب‌سازی مسیر</button>
       <button class="btn btn-ghost" id="btn-view-route" disabled>📋 نمایش مسیر مرتب‌شده</button>
       <button class="btn btn-ghost" id="btn-rescan" disabled>🔎 پیدا کردن شماره توقف (اسکن دوباره)</button>
@@ -294,7 +310,7 @@ a{color:var(--primary);}
       <div class="card" style="margin-top:18px;">
         <h2 style="font-size:.9rem;">راهنمای سریع</h2>
         <p class="lead" style="margin-bottom:0;font-size:.82rem;">
-          ۱) اسکن آدرس‌ها یکی‌یکی با دوربین<br>
+          ۱) آدرس‌ها را یکی‌یکی با صدا بگو<br>
           ۲) بعد از تمام‌شدن، «مرتب‌سازی مسیر» را بزنید<br>
           ۳) هنگام رانندگی برای پیدا کردن شماره‌ی هر بسته، از «پیدا کردن شماره توقف» استفاده کنید<br>
           ۴) در پایان روز با «پاک کردن همه‌ی اطلاعات» صفحه را برای فردا خالی کنید
@@ -343,32 +359,27 @@ a{color:var(--primary);}
   <section class="screen" id="screen-scan">
     <div class="topbar">
       <div class="iconbtn" id="scan-back">➜</div>
-      <div class="wordmark">اسکن آدرس <small id="scan-progress-label"></small></div>
+      <div class="wordmark">افزودن آدرس <small id="scan-progress-label"></small></div>
     </div>
     <main>
-      <div id="scan-camera-view">
-        <div class="camera-box">
-          <video id="scan-video" autoplay playsinline muted></video>
-          <div class="guide"></div>
+      <div id="scan-voice-view">
+        <div class="card" style="text-align:center;padding:34px 16px;">
+          <div class="mic-circle" id="mic-visual">🎙️</div>
+          <p class="lead" id="voice-status" style="margin:16px 0 0;">دکمه را بزن و آدرس را واضح بگو</p>
+          <div id="voice-transcript" style="min-height:64px;font-size:1rem;line-height:2;margin-top:12px;"></div>
+          <p style="font-size:.72rem;color:var(--ink-soft);margin-top:10px;">میکروفون را نزدیک دهانت نگه دار تا صدای اطراف کمتر ضبط شود</p>
         </div>
-        <div class="shutter-wrap"><div class="shutter" id="btn-capture"></div></div>
-        <input type="file" id="file-fallback" accept="image/*" capture="environment" style="display:none;">
-        <div class="link-row"><a href="#" id="link-file-fallback">اگر دوربین باز نشد، از اینجا عکس بگیرید</a></div>
-      </div>
-
-      <div id="scan-ocr-view" style="display:none;">
-        <div class="camera-box"><img class="preview" id="captured-preview" alt="عکس گرفته‌شده"></div>
-        <div class="status-msg" id="ocr-status"><span class="spinner"></span> در حال خواندن متن…</div>
+        <button class="btn btn-primary" id="btn-mic-toggle">🎤 شروع گفتن آدرس</button>
+        <button class="btn btn-ghost" id="btn-manual-type">⌨️ به‌جای صدا، تایپ می‌کنم</button>
       </div>
 
       <div id="scan-edit-view" style="display:none;">
-        <div class="camera-box" style="aspect-ratio:16/8;"><img class="preview" id="captured-preview-2" alt="عکس گرفته‌شده"></div>
         <div class="field">
           <label class="field-label">متن آدرس (قابل ویرایش)</label>
           <textarea id="address-text"></textarea>
         </div>
         <button class="btn btn-accent" id="btn-find-address">📍 پیدا کردن آدرس</button>
-        <button class="btn btn-ghost" id="btn-retake">🔄 گرفتن مجدد عکس</button>
+        <button class="btn btn-ghost" id="btn-retake">🎤 گفتن دوباره با صدا</button>
       </div>
 
       <div id="scan-searching-view" style="display:none;">
@@ -387,7 +398,7 @@ a{color:var(--primary);}
           <div class="badge" id="confirm-badge">آدرس پیدا شد</div>
           <p style="margin:10px 0 0;font-size:.92rem;line-height:1.8;" id="confirm-address"></p>
         </div>
-        <button class="btn btn-primary" id="btn-save-next">✅ ذخیره و اسکن بعدی</button>
+        <button class="btn btn-primary" id="btn-save-next">✅ ذخیره و آدرس بعدی</button>
         <button class="btn btn-ghost" id="btn-confirm-edit">✏️ ویرایش دوباره</button>
       </div>
 
@@ -421,19 +432,28 @@ a{color:var(--primary);}
       <div class="wordmark">پیدا کردن شماره توقف</div>
     </div>
     <main>
-      <div id="rescan-camera-view">
-        <div class="camera-box">
-          <video id="rescan-video" autoplay playsinline muted></video>
-          <div class="guide"></div>
+      <div id="rescan-voice-view">
+        <div class="card" style="text-align:center;padding:34px 16px;">
+          <div class="mic-circle" id="rescan-mic-visual">🎙️</div>
+          <p class="lead" id="rescan-voice-status" style="margin:16px 0 0;">دکمه را بزن و آدرس را واضح بگو</p>
+          <div id="rescan-voice-transcript" style="min-height:64px;font-size:1rem;line-height:2;margin-top:12px;"></div>
+          <p style="font-size:.72rem;color:var(--ink-soft);margin-top:10px;">میکروفون را نزدیک دهانت نگه دار تا صدای اطراف کمتر ضبط شود</p>
         </div>
-        <div class="shutter-wrap"><div class="shutter" id="btn-rescan-capture"></div></div>
+        <button class="btn btn-primary" id="btn-rescan-mic-toggle">🎤 شروع گفتن آدرس</button>
+        <div class="link-row"><a href="#" id="link-rescan-manual">یا از لیست انتخاب کنید</a></div>
       </div>
       <div id="rescan-result-view" style="display:none;">
         <div class="center-box">
           <div class="big" id="rescan-stop-num">—</div>
           <p class="lead" id="rescan-matched-addr"></p>
         </div>
-        <button class="btn btn-primary" id="btn-rescan-again">📷 اسکن آدرس بعدی</button>
+        <button class="btn btn-primary" id="btn-rescan-again">🎤 آدرس بعدی</button>
+        <button class="btn btn-ghost" id="btn-rescan-wrong">این درست نیست، از لیست انتخاب کنم</button>
+      </div>
+      <div id="rescan-manual-view" style="display:none;">
+        <div class="field"><input type="text" id="rescan-manual-search" placeholder="جستجو در متن آدرس‌ها…"></div>
+        <div class="card" id="rescan-manual-list" style="max-height:60vh;overflow:auto;"></div>
+        <button class="btn btn-ghost" id="btn-rescan-manual-back">🎤 بازگشت به میکروفون</button>
       </div>
     </main>
   </section>
@@ -443,7 +463,6 @@ a{color:var(--primary);}
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 /* ===================== helpers ===================== */
 const $ = (id) => document.getElementById(id);
@@ -562,26 +581,50 @@ async function searchPlace(term, bias){
 async function hierarchicalGeocode(rawText, startLoc){
   const parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
   let bias = startLoc || null;
+  let localityRadiusKm = 40; // wide default until we lock onto a confident locality
   if(parts.length >= 2){
-    const localityQuery = parts.slice(0, -1).join(' ');
-    try{
-      const localityResults = await searchPlace(localityQuery, bias);
-      if(localityResults.length) bias = localityResults[0].coords;
-    }catch(e){ /* keep previous bias */ }
+    // Try the immediate locality first (e.g. "صدرا" in "فارس، شیراز، صدرا، ...") —
+    // a single sharp term narrows better than mashing the whole admin chain together.
+    const immediateLocality = parts[parts.length-2];
+    let localityResults = [];
+    try{ localityResults = await searchPlace(immediateLocality, bias); }catch(e){}
+    if(!localityResults.length){
+      const localityQuery = parts.slice(0, -1).join(' ');
+      try{ localityResults = await searchPlace(localityQuery, bias); }catch(e){}
+    }
+    if(localityResults.length){
+      bias = localityResults[0].coords;
+      localityRadiusKm = 8; // once locked onto a locality, don't let other cities leak in
+    }
   }
   const specificQuery = parts.length ? parts[parts.length-1] : rawText;
   let results = await searchPlace(specificQuery, bias);
+  if(bias && results.length){
+    // Drop results far outside the resolved locality (e.g. a same-named place
+    // that actually sits in Shiraz when the address said Sadra specifically).
+    const nearby = results.filter(r => haversineKm(bias, r.coords) <= localityRadiusKm);
+    if(nearby.length) results = nearby;
+  }
   if(!results.length){
-    results = await searchPlace(rawText, bias); // fallback: try the whole raw text
+    results = await searchPlace(rawText, bias); // last resort: try the whole raw text
   }
   return results;
 }
 
 /* ===================== leaflet map helpers ===================== */
+const _mapInstances = {};
 function renderSmallMap(containerId, point, extraPoints){
   const el = $(containerId);
+  // Leaflet tags a DOM node when a map is created on it and refuses to
+  // re-init the same node — clearing innerHTML alone doesn't clear that tag,
+  // which is why the thumbnail stopped appearing after the first scan.
+  if(_mapInstances[containerId]){
+    try{ _mapInstances[containerId].remove(); }catch(e){}
+    delete _mapInstances[containerId];
+  }
   el.innerHTML = '';
   const map = L.map(el, {zoomControl:false, attributionControl:false, dragging:true, scrollWheelZoom:false}).setView([point.lat, point.lng], 15);
+  _mapInstances[containerId] = map;
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
   L.marker([point.lat, point.lng]).addTo(map);
   (extraPoints||[]).forEach((p,i)=>{
@@ -645,35 +688,71 @@ $('btn-clear').addEventListener('click', ()=>{
   }
 });
 
-/* ===================== scan flow state ===================== */
-let scanStream = null;
-let capturedDataUrl = null;
-let currentGeocodeResults = [];
-let pendingSave = null; // {editedText, coords, formatted}
+/* ===================== speech recognition (shared) ===================== */
+function supportsSpeech(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
 
-async function startCamera(videoEl){
+// Grab our own mic track with the browser's noise-suppression / echo-cancellation /
+// auto-gain constraints turned on, so background noise (traffic, wind, other people
+// talking) is filtered before it ever reaches the speech recognizer — instead of
+// letting the recognizer open the mic itself with default (often weaker) settings.
+async function getEnhancedMicTrack(){
   try{
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
-    videoEl.srcObject = scanStream;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true
+      }
+    });
+    return stream.getAudioTracks()[0] || null;
   }catch(e){
-    console.warn('camera error', e);
-    toast('دسترسی به دوربین ممکن نشد؛ از گزینه‌ی جایگزین استفاده کنید.');
+    console.warn('enhanced mic track unavailable, using default mic', e);
+    return null;
   }
 }
-function stopCamera(){
-  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+
+function createRecognizer(onUpdate, onEnd, onError){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SR();
+  rec.lang = 'fa-IR';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  let finalText = '';
+  rec.onresult = (e)=>{
+    let interim = '';
+    for(let i=e.resultIndex; i<e.results.length; i++){
+      const t = e.results[i][0].transcript;
+      if(e.results[i].isFinal) finalText += t;
+      else interim += t;
+    }
+    onUpdate(finalText, interim);
+  };
+  rec.onerror = (e)=>{ onError && onError(e.error); };
+  rec.onend = ()=>{ onEnd && onEnd(finalText); };
+  return rec;
 }
 
-async function captureFrame(videoEl, quality){
-  const canvas = document.createElement('canvas');
-  // Keep the working image small on purpose: faster OCR, faster upload.
-  const targetW = 900;
-  const scale = targetW / videoEl.videoWidth;
-  canvas.width = targetW;
-  canvas.height = videoEl.videoHeight * scale;
-  canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', quality || 0.6);
+// Starts recognition using a noise-suppressed mic track when the browser supports
+// binding one (newer Chrome); silently falls back to the recognizer's own default
+// mic access otherwise — either way the caller doesn't need to know which happened.
+async function startRecognizerFocused(rec, trackHolder){
+  const track = await getEnhancedMicTrack();
+  if(track){
+    trackHolder.track = track;
+    try{ rec.start(track); return; }catch(e){ /* fall through to default start */ }
+  }
+  try{ rec.start(); }catch(e){ /* already started, ignore */ }
 }
+function stopRecognizerFocused(rec, trackHolder){
+  try{ rec.stop(); }catch(e){}
+  if(trackHolder.track){ try{ trackHolder.track.stop(); }catch(e){} trackHolder.track = null; }
+}
+
+/* ===================== scan flow state (voice input) ===================== */
+let pendingSave = null; // {editedText, coords, formatted}
+let scanRec = null, scanListening = false, scanFinalText = '';
+const scanTrackHolder = { track: null };
 
 $('btn-new-scan').addEventListener('click', async ()=>{
   resetScanUI();
@@ -686,65 +765,74 @@ $('btn-new-scan').addEventListener('click', async ()=>{
       toast('موقعیت شروع مسیر ثبت شد.');
     }catch(e){ toast('نتوانستیم موقعیت فعلی را بگیریم؛ می‌توانید بعداً دوباره تلاش کنید.'); }
   }
-  await startCamera($('scan-video'));
 });
 
 function resetScanUI(){
-  $('scan-camera-view').style.display='';
-  $('scan-ocr-view').style.display='none';
+  $('scan-voice-view').style.display='';
   $('scan-edit-view').style.display='none';
   $('scan-searching-view').style.display='none';
   $('scan-results-view').style.display='none';
   $('scan-confirm-view').style.display='none';
   $('scan-notfound-view').style.display='none';
   $('scan-progress-label').textContent = ` — ${DB.addresses.length} ذخیره‌شده`;
+  resetScanVoiceUI();
+}
+function resetScanVoiceUI(){
+  scanFinalText = '';
+  $('voice-transcript').textContent = '';
+  $('voice-status').textContent = 'دکمه را بزن و آدرس را واضح بگو';
+  $('mic-visual').classList.remove('listening');
+  $('btn-mic-toggle').textContent = '🎤 شروع گفتن آدرس';
 }
 
-$('scan-back').addEventListener('click', ()=>{ stopCamera(); refreshDashboard(); show('screen-dashboard'); });
-
-$('link-file-fallback').addEventListener('click', (e)=>{ e.preventDefault(); $('file-fallback').click(); });
-$('file-fallback').addEventListener('change', (e)=>{
-  const f = e.target.files[0];
-  if(!f) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{ capturedDataUrl = reader.result; afterCapture(); };
-  reader.readAsDataURL(f);
+$('scan-back').addEventListener('click', ()=>{
+  if(scanRec){ scanListening=false; stopRecognizerFocused(scanRec, scanTrackHolder); }
+  refreshDashboard();
+  show('screen-dashboard');
 });
 
-$('btn-capture').addEventListener('click', async ()=>{
-  const v = $('scan-video');
-  if(!v.videoWidth){ toast('دوربین هنوز آماده نیست…'); return; }
-  capturedDataUrl = await captureFrame(v, 0.55);
-  afterCapture();
+$('btn-mic-toggle').addEventListener('click', ()=>{
+  if(!scanListening) startScanMic(); else stopScanMic();
 });
-
-async function afterCapture(){
-  stopCamera();
-  $('scan-camera-view').style.display='none';
-  $('scan-ocr-view').style.display='';
-  $('captured-preview').src = capturedDataUrl;
-  $('ocr-status').innerHTML = '<span class="spinner" style="border-top-color:var(--primary);border-color:rgba(47,111,94,.25);"></span> در حال خواندن متن…';
-  try{
-    const { data } = await Tesseract.recognize(capturedDataUrl, 'fas+eng');
-    const text = (data.text||'').trim();
-    $('scan-ocr-view').style.display='none';
-    $('scan-edit-view').style.display='';
-    $('captured-preview-2').src = capturedDataUrl;
-    $('address-text').value = text;
-  }catch(e){
-    console.error(e);
-    $('scan-ocr-view').style.display='none';
-    $('scan-edit-view').style.display='';
-    $('captured-preview-2').src = capturedDataUrl;
-    $('address-text').value = '';
-    toast('خواندن خودکار متن ممکن نشد؛ آدرس را دستی وارد کنید.');
+function startScanMic(){
+  if(!supportsSpeech()){
+    toast('این مرورگر از تشخیص گفتار پشتیبانی نمی‌کند — می‌توانید تایپ کنید.');
+    goToScanEdit('');
+    return;
   }
+  scanFinalText = '';
+  $('voice-transcript').textContent = '';
+  $('mic-visual').classList.add('listening');
+  $('voice-status').textContent = 'در حال گوش دادن… آدرس را واضح بگو';
+  $('btn-mic-toggle').textContent = '⏹️ پایان و ویرایش متن';
+  scanListening = true;
+  scanRec = createRecognizer(
+    (finalT, interim)=>{ scanFinalText = finalT; $('voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
+    ()=>{ if(scanListening){ startRecognizerFocused(scanRec, scanTrackHolder); } }, // auto-restart if browser stopped from silence but user hasn't tapped stop
+    (err)=>{ if(err !== 'no-speech') console.warn('speech error', err); }
+  );
+  startRecognizerFocused(scanRec, scanTrackHolder);
 }
+function stopScanMic(){
+  scanListening = false;
+  if(scanRec) stopRecognizerFocused(scanRec, scanTrackHolder);
+  $('mic-visual').classList.remove('listening');
+  goToScanEdit(scanFinalText.trim());
+}
+function goToScanEdit(text){
+  $('scan-voice-view').style.display='none';
+  $('scan-edit-view').style.display='';
+  $('address-text').value = text;
+}
+$('btn-manual-type').addEventListener('click', ()=>{
+  if(scanRec){ scanListening=false; stopRecognizerFocused(scanRec, scanTrackHolder); }
+  goToScanEdit('');
+});
 
-$('btn-retake').addEventListener('click', async ()=>{
+$('btn-retake').addEventListener('click', ()=>{
   $('scan-edit-view').style.display='none';
-  $('scan-camera-view').style.display='';
-  await startCamera($('scan-video'));
+  $('scan-voice-view').style.display='';
+  resetScanVoiceUI();
 });
 
 $('btn-find-address').addEventListener('click', async ()=>{
@@ -754,7 +842,6 @@ $('btn-find-address').addEventListener('click', async ()=>{
   $('scan-searching-view').style.display='';
   try{
     const results = await hierarchicalGeocode(text, DB.startLoc);
-    currentGeocodeResults = results;
     $('scan-searching-view').style.display='none';
     if(!results.length){
       $('scan-notfound-view').style.display='';
@@ -804,7 +891,7 @@ $('btn-confirm-edit').addEventListener('click', ()=>{
   $('scan-edit-view').style.display='';
 });
 
-$('btn-save-next').addEventListener('click', async ()=>{
+$('btn-save-next').addEventListener('click', ()=>{
   if(!pendingSave) return;
   DB.addresses.push({
     id: 'a'+Date.now()+Math.floor(Math.random()*999),
@@ -817,19 +904,27 @@ $('btn-save-next').addEventListener('click', async ()=>{
   saveDB();
   pendingSave = null;
   resetScanUI();
-  toast('آدرس ذخیره شد. آدرس بعدی را اسکن کنید.');
-  await startCamera($('scan-video'));
+  toast('آدرس ذخیره شد. آدرس بعدی را بگو.');
 });
 
 /* ===================== sorting ===================== */
 function clusterAndSort(startLoc, addresses, radiusKm){
   radiusKm = radiusKm || 1;
   let remaining = addresses.map(a=>({...a}));
-  let current = startLoc;
+  // path tracks the last placed points' coords, starting with the driver's
+  // own start location. Each next stop is scored against the last TWO placed
+  // points (not just the very last one) so the route doesn't zig-zag — except
+  // the very first stop, which only has the start location behind it.
+  let path = [startLoc];
   let stopIndex = 0;
   const ordered = [];
   while(remaining.length){
-    remaining.sort((a,b)=> haversineKm(current,a.coords) - haversineKm(current,b.coords));
+    const last1 = path[path.length-1];
+    const last2 = path.length >= 2 ? path[path.length-2] : null;
+    remaining.forEach(a=>{
+      a._score = haversineKm(last1, a.coords) + (last2 ? haversineKm(last2, a.coords) : 0);
+    });
+    remaining.sort((a,b)=> a._score - b._score);
     const anchor = remaining[0];
     const cluster = remaining.filter(a => haversineKm(anchor.coords, a.coords) <= radiusKm);
     remaining = remaining.filter(a => !cluster.includes(a));
@@ -837,9 +932,10 @@ function clusterAndSort(startLoc, addresses, radiusKm){
     stopIndex++;
     cluster.forEach((m,idx)=>{
       m.stopLabel = cluster.length > 1 ? `${stopIndex}-${idx+1}` : `${stopIndex}`;
+      delete m._score;
     });
     ordered.push(...cluster);
-    current = cluster[cluster.length-1].coords;
+    path.push(cluster[cluster.length-1].coords);
   }
   return ordered;
 }
@@ -877,57 +973,123 @@ function showRoute(){
 }
 $('route-back').addEventListener('click', ()=>show('screen-dashboard'));
 
-/* ===================== rescan / match ===================== */
-let rescanStream = null;
-$('btn-rescan').addEventListener('click', async ()=>{
-  $('rescan-camera-view').style.display='';
+/* ===================== rescan / match (voice input) ===================== */
+let rescanRec = null, rescanListening = false, rescanFinalText = '';
+const rescanTrackHolder = { track: null };
+
+$('btn-rescan').addEventListener('click', ()=>{
+  resetRescanVoiceUI();
+  $('rescan-voice-view').style.display='';
   $('rescan-result-view').style.display='none';
+  $('rescan-manual-view').style.display='none';
   show('screen-rescan');
-  try{
-    rescanStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'}, audio:false });
-    $('rescan-video').srcObject = rescanStream;
-  }catch(e){ toast('دسترسی به دوربین ممکن نشد.'); }
 });
 $('rescan-back').addEventListener('click', ()=>{
-  if(rescanStream){ rescanStream.getTracks().forEach(t=>t.stop()); rescanStream=null; }
+  if(rescanRec){ rescanListening=false; stopRecognizerFocused(rescanRec, rescanTrackHolder); }
   show('screen-dashboard');
 });
-$('btn-rescan-capture').addEventListener('click', async ()=>{
-  const v = $('rescan-video');
-  if(!v.videoWidth){ toast('دوربین آماده نیست…'); return; }
-  const dataUrl = await captureFrame(v, 0.55);
-  if(rescanStream){ rescanStream.getTracks().forEach(t=>t.stop()); rescanStream=null; }
-  $('rescan-camera-view').style.display='none';
-  $('rescan-result-view').style.display='';
-  $('rescan-stop-num').textContent = '…';
-  $('rescan-matched-addr').textContent = 'در حال خواندن و تطبیق متن…';
-  try{
-    const { data } = await Tesseract.recognize(dataUrl, 'fas+eng');
-    const text = (data.text||'').trim();
-    let best = null, bestScore = 0;
-    DB.addresses.forEach(a=>{
-      const score = textSimilarity(text, a.text + ' ' + (a.formatted||''));
-      if(score > bestScore){ bestScore = score; best = a; }
-    });
-    if(best && bestScore > 0.15){
-      $('rescan-stop-num').textContent = best.stopLabel || '؟';
-      $('rescan-matched-addr').textContent = best.formatted || best.text;
-    } else {
-      $('rescan-stop-num').textContent = '❓';
-      $('rescan-matched-addr').textContent = 'این آدرس در لیست مرتب‌شده پیدا نشد.';
-    }
-  }catch(e){
-    $('rescan-stop-num').textContent = '❓';
-    $('rescan-matched-addr').textContent = 'خواندن متن ممکن نشد.';
-  }
+function resetRescanVoiceUI(){
+  rescanFinalText = '';
+  $('rescan-voice-transcript').textContent = '';
+  $('rescan-voice-status').textContent = 'دکمه را بزن و آدرس را واضح بگو';
+  $('rescan-mic-visual').classList.remove('listening');
+  $('btn-rescan-mic-toggle').textContent = '🎤 شروع گفتن آدرس';
+}
+$('btn-rescan-mic-toggle').addEventListener('click', ()=>{
+  if(!rescanListening) startRescanMic(); else stopRescanMic();
 });
-$('btn-rescan-again').addEventListener('click', async ()=>{
+function startRescanMic(){
+  if(!supportsSpeech()){
+    toast('این مرورگر از تشخیص گفتار پشتیبانی نمی‌کند — از لیست انتخاب کنید.');
+    openRescanManual();
+    return;
+  }
+  rescanFinalText = '';
+  $('rescan-voice-transcript').textContent = '';
+  $('rescan-mic-visual').classList.add('listening');
+  $('rescan-voice-status').textContent = 'در حال گوش دادن…';
+  $('btn-rescan-mic-toggle').textContent = '⏹️ پایان و تطبیق';
+  rescanListening = true;
+  rescanRec = createRecognizer(
+    (finalT, interim)=>{ rescanFinalText = finalT; $('rescan-voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
+    ()=>{ if(rescanListening){ startRecognizerFocused(rescanRec, rescanTrackHolder); } },
+    (err)=>{ if(err !== 'no-speech') console.warn('speech error', err); }
+  );
+  startRecognizerFocused(rescanRec, rescanTrackHolder);
+}
+function stopRescanMic(){
+  rescanListening = false;
+  if(rescanRec) stopRecognizerFocused(rescanRec, rescanTrackHolder);
+  $('rescan-mic-visual').classList.remove('listening');
+  matchSpokenAddress(rescanFinalText.trim());
+}
+function matchSpokenAddress(text){
+  $('rescan-voice-view').style.display='none';
+  $('rescan-result-view').style.display='';
+  if(!text){
+    toast('چیزی شنیده نشد — از لیست انتخاب کنید.');
+    openRescanManual();
+    return;
+  }
+  let best = null, bestScore = 0;
+  DB.addresses.forEach(a=>{
+    const score = textSimilarity(text, a.text + ' ' + (a.formatted||''));
+    if(score > bestScore){ bestScore = score; best = a; }
+  });
+  if(best && bestScore > 0.15){
+    $('rescan-stop-num').textContent = best.stopLabel || '؟';
+    $('rescan-matched-addr').textContent = best.formatted || best.text;
+  } else {
+    toast('تطبیق خودکار مطمئن نبود — از لیست انتخاب کنید.');
+    openRescanManual();
+  }
+}
+$('btn-rescan-again').addEventListener('click', ()=>{
   $('rescan-result-view').style.display='none';
-  $('rescan-camera-view').style.display='';
-  try{
-    rescanStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'}, audio:false });
-    $('rescan-video').srcObject = rescanStream;
-  }catch(e){ toast('دسترسی به دوربین ممکن نشد.'); }
+  $('rescan-voice-view').style.display='';
+  resetRescanVoiceUI();
+});
+$('btn-rescan-wrong').addEventListener('click', openRescanManual);
+
+function openRescanManual(){
+  if(rescanRec){ rescanListening=false; stopRecognizerFocused(rescanRec, rescanTrackHolder); }
+  $('rescan-voice-view').style.display='none';
+  $('rescan-result-view').style.display='none';
+  $('rescan-manual-view').style.display='';
+  $('rescan-manual-search').value='';
+  renderRescanManualList('');
+}
+function renderRescanManualList(filterText){
+  const wrap = $('rescan-manual-list');
+  wrap.innerHTML='';
+  const list = DB.addresses.filter(a=>{
+    if(!filterText) return true;
+    return normalizeFa(a.text+' '+(a.formatted||'')).includes(normalizeFa(filterText));
+  }).sort((a,b)=> String(a.stopLabel).localeCompare(String(b.stopLabel), 'fa', {numeric:true}));
+  list.forEach(a=>{
+    const row = document.createElement('div');
+    row.className = 'stop-row';
+    row.style.cursor='pointer';
+    row.innerHTML = `<div class="stop-num">${a.stopLabel||''}</div>
+      <div class="stop-body"><div class="addr">${a.formatted||a.text}</div><div class="meta">${a.text}</div></div>`;
+    row.addEventListener('click', ()=>{
+      $('rescan-manual-view').style.display='none';
+      $('rescan-result-view').style.display='';
+      $('rescan-stop-num').textContent = a.stopLabel || '؟';
+      $('rescan-matched-addr').textContent = a.formatted || a.text;
+    });
+    wrap.appendChild(row);
+  });
+  if(!list.length){
+    wrap.innerHTML = '<p class="lead" style="margin:0;">موردی پیدا نشد.</p>';
+  }
+}
+$('rescan-manual-search').addEventListener('input', (e)=> renderRescanManualList(e.target.value));
+$('link-rescan-manual').addEventListener('click', (e)=>{ e.preventDefault(); openRescanManual(); });
+$('btn-rescan-manual-back').addEventListener('click', ()=>{
+  $('rescan-manual-view').style.display='none';
+  $('rescan-voice-view').style.display='';
+  resetRescanVoiceUI();
 });
 
 /* ===================== boot ===================== */
