@@ -588,26 +588,15 @@ async function searchPlace(term, bias){
   return merged;
 }
 
-// Hierarchical geocode: drill down through each comma-separated part in
-// order — e.g. "فارس، شیراز، صدرا، مولانا سه" resolves فارس, then narrows to
-// شیراز near that, then narrows to صدرا near that, then finally searches
-// "مولانا سه" right around صدرا instead of scanning the whole province.
-// When there's no comma at all (dictation without reliable pause detection),
-// fall back to the same drill-down using plain words instead: everything
-// except the last two words is treated as the locality chain, and the last
-// two words as the specific place — Persian addresses are almost always
-// broad-to-narrow, ending in a short street/complex name.
-async function hierarchicalGeocode(rawText, startLoc){
-  let parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
-  if(parts.length < 2){
-    const words = rawText.split(/\s+/).filter(Boolean);
-    if(words.length > 2){
-      parts = [...words.slice(0, -2), words.slice(-2).join(' ')];
-    }
-  }
+// Drills down through every "part" in order (locality chain), then searches
+// the last `tailSize` parts together as the specific place near the
+// resulting bias. Used by hierarchicalGeocode below with different tail
+// sizes so a 1- or 2-word building/complex name both get a fair try.
+async function geocodeWithTail(parts, startLoc, tailSize){
   let bias = startLoc || null;
-  let localityRadiusKm = 40; // wide default until we lock onto a confident locality
-  for(let i=0; i<parts.length-1; i++){
+  let localityRadiusKm = 40;
+  const splitAt = Math.max(parts.length - tailSize, 0);
+  for(let i=0; i<splitAt; i++){
     let stepResults = [];
     try{ stepResults = await searchPlace(parts[i], bias); }catch(e){}
     if(stepResults.length){
@@ -615,18 +604,49 @@ async function hierarchicalGeocode(rawText, startLoc){
       localityRadiusKm = 8; // once locked onto a locality, don't let other cities leak in
     }
   }
-  const specificQuery = parts.length ? parts[parts.length-1] : rawText;
+  const specificQuery = parts.slice(splitAt).join(' ');
   let results = await searchPlace(specificQuery, bias);
   if(bias && results.length){
-    // Drop results far outside the resolved locality (e.g. a same-named place
-    // that actually sits in Shiraz when the address said Sadra specifically).
     const nearby = results.filter(r => haversineKm(bias, r.coords) <= localityRadiusKm);
-    if(nearby.length) results = nearby;
-  }
-  if(!results.length){
-    results = await searchPlace(rawText, bias); // last resort: try the whole raw text
+    if(localityRadiusKm <= 8){
+      // We confidently resolved a locality (e.g. صدرا) — a match that isn't
+      // actually near it is wrong, even if it's the only thing that came
+      // back (e.g. a same-named place in another city). Reject it outright
+      // rather than showing it, so the caller can try a different tail size
+      // or the full-text fallback instead.
+      results = nearby;
+    } else if(nearby.length){
+      results = nearby;
+    }
   }
   return results;
+}
+
+// Hierarchical geocode: drill down through each comma-separated part in
+// order — e.g. "فارس، شیراز، صدرا، مولانا سه" resolves فارس, then narrows to
+// شیراز near that, then narrows to صدرا near that, then finally searches
+// "مولانا سه" right around صدرا instead of scanning the whole province.
+// When there's no comma at all, every space-separated word is treated as its
+// own part instead — so dictation without commas drills down exactly the
+// same way. The final place name might be one word ("خیابان X") or two
+// ("مجتمع رضوان", "مولانا سه"), so in that word-split case we try a
+// two-word tail first, then fall back to a one-word tail.
+async function hierarchicalGeocode(rawText, startLoc){
+  let parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  const fromWords = parts.length < 2;
+  if(fromWords){
+    const words = rawText.split(/\s+/).filter(Boolean);
+    if(words.length >= 2) parts = words;
+  }
+  if(parts.length < 2){
+    return await searchPlace(rawText, startLoc);
+  }
+  const tailSizes = fromWords ? [2, 3, 1] : [1];
+  for(const tail of tailSizes){
+    const results = await geocodeWithTail(parts, startLoc, Math.min(tail, parts.length - 1));
+    if(results.length) return results;
+  }
+  return await searchPlace(rawText, startLoc); // last resort: try the whole raw text
 }
 
 /* ===================== leaflet map helpers ===================== */
