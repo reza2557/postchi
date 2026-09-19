@@ -127,7 +127,7 @@ input[type=text],input[type=password],textarea{
   padding:12px 13px;
   border-radius:8px;
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   color:var(--ink);
   resize:vertical;
 }
@@ -564,14 +564,24 @@ async function nominatimSearch(term, bias){
 
 async function searchPlace(term, bias){
   const key = getNeshanKey();
+  // Always try both sources when a Neshan key is set, and merge — rather than
+  // using Neshan only when it succeeds. A Neshan call that "succeeds" but with
+  // a wrong/irrelevant match would otherwise silently block the (often more
+  // complete) Nominatim results from ever being shown.
+  let neshanResults = [];
   if(key){
-    try{
-      const r = await neshanSearch(term, bias, key);
-      if(r.length) return r;
-    }catch(e){ console.warn('neshan search failed, falling back', e); }
+    try{ neshanResults = await neshanSearch(term, bias, key); }
+    catch(e){ console.warn('neshan search failed', e); }
   }
-  try{ return await nominatimSearch(term, bias); }
-  catch(e){ console.warn('nominatim failed', e); return []; }
+  let nominatimResults = [];
+  try{ nominatimResults = await nominatimSearch(term, bias); }
+  catch(e){ console.warn('nominatim failed', e); }
+  const merged = [...neshanResults];
+  nominatimResults.forEach(nr=>{
+    const dup = merged.some(m => haversineKm(m.coords, nr.coords) < 0.15);
+    if(!dup) merged.push(nr);
+  });
+  return merged;
 }
 
 // Hierarchical geocode: narrow to locality first, then search the specific
@@ -695,7 +705,11 @@ function createRecognizer(onUpdate, onEnd, onError){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SR();
   rec.lang = 'fa-IR';
-  rec.continuous = true;
+  // Single utterance per start(): Android Chrome's continuous mode is what was
+  // causing the repeated "ding" (it kept auto-restarting) and duplicated words
+  // (each restart re-reported overlapping speech). One clean utterance per tap
+  // is far more reliable — multiple taps can still build up a longer address.
+  rec.continuous = false;
   rec.interimResults = true;
   rec.maxAlternatives = 1;
   let finalText = '';
@@ -713,6 +727,15 @@ function createRecognizer(onUpdate, onEnd, onError){
   return rec;
 }
 
+// Joins two chunks of dictated text with exactly one space, so building an
+// address across multiple mic taps never glues or duplicates words.
+function joinSpeech(existing, addition){
+  addition = (addition || '').trim();
+  if(!addition) return existing;
+  if(!existing) return addition;
+  return (existing.trim() + ' ' + addition).replace(/\s+/g, ' ').trim();
+}
+
 // The browser's own SpeechRecognition already opens the mic with reasonable
 // noise handling on Android — earlier this tried to hand it a separately
 // captured, noise-suppressed track, but binding a custom track this way isn't
@@ -723,7 +746,7 @@ function stopRecognizer(rec){ try{ rec.stop(); }catch(e){} }
 
 /* ===================== scan flow state (voice input) ===================== */
 let pendingSave = null; // {editedText, coords, formatted}
-let scanRec = null, scanListening = false, scanFinalText = '';
+let scanRec = null, scanListening = false, scanAccumulated = '';
 
 $('btn-new-scan').addEventListener('click', async ()=>{
   resetScanUI();
@@ -746,14 +769,14 @@ function resetScanUI(){
   $('scan-confirm-view').style.display='none';
   $('scan-notfound-view').style.display='none';
   $('scan-progress-label').textContent = ` — ${DB.addresses.length} ذخیره‌شده`;
-  resetScanVoiceUI();
+  resetScanVoiceUI('');
 }
-function resetScanVoiceUI(){
-  scanFinalText = '';
-  $('voice-transcript').textContent = '';
-  $('voice-status').textContent = 'دکمه را بزن و آدرس را واضح بگو';
+function resetScanVoiceUI(keepText){
+  scanAccumulated = keepText || '';
+  $('voice-transcript').textContent = scanAccumulated;
+  $('voice-status').textContent = scanAccumulated ? 'دکمه را بزن تا ادامه بدهی' : 'دکمه را بزن و آدرس را واضح بگو';
   $('mic-visual').classList.remove('listening');
-  $('btn-mic-toggle').textContent = '🎤 شروع گفتن آدرس';
+  $('btn-mic-toggle').textContent = scanAccumulated ? '🎤 ادامه بده' : '🎤 شروع گفتن آدرس';
 }
 
 $('scan-back').addEventListener('click', ()=>{
@@ -768,27 +791,36 @@ $('btn-mic-toggle').addEventListener('click', ()=>{
 function startScanMic(){
   if(!supportsSpeech()){
     toast('این مرورگر از تشخیص گفتار پشتیبانی نمی‌کند — می‌توانید تایپ کنید.');
-    goToScanEdit('');
+    goToScanEdit(scanAccumulated);
     return;
   }
-  scanFinalText = '';
-  $('voice-transcript').textContent = '';
   $('mic-visual').classList.add('listening');
-  $('voice-status').textContent = 'در حال گوش دادن… آدرس را واضح بگو';
-  $('btn-mic-toggle').textContent = '⏹️ پایان و ویرایش متن';
+  $('voice-status').textContent = 'در حال گوش دادن…';
+  $('btn-mic-toggle').textContent = '⏹️ توقف';
   scanListening = true;
+  let utterance = '';
   scanRec = createRecognizer(
-    (finalT, interim)=>{ scanFinalText = finalT; $('voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
-    ()=>{ if(scanListening){ startRecognizer(scanRec); } }, // auto-restart if browser stopped from silence but user hasn't tapped stop
-    (err)=>{ if(err !== 'no-speech') console.warn('speech error', err); }
+    (finalT, interim)=>{
+      utterance = finalT;
+      $('voice-transcript').textContent = joinSpeech(scanAccumulated, finalT + (interim ? (' '+interim) : ''));
+    },
+    ()=>{ // fires once, either after natural silence or a manual stop — never restarts
+      scanListening = false;
+      $('mic-visual').classList.remove('listening');
+      scanAccumulated = joinSpeech(scanAccumulated, utterance);
+      goToScanEdit(scanAccumulated);
+    },
+    (err)=>{
+      scanListening = false;
+      $('mic-visual').classList.remove('listening');
+      if(err !== 'no-speech'){ console.warn('speech error', err); toast('مشکلی در تشخیص گفتار پیش آمد.'); }
+      resetScanVoiceUI(scanAccumulated);
+    }
   );
   startRecognizer(scanRec);
 }
 function stopScanMic(){
-  scanListening = false;
-  if(scanRec) stopRecognizer(scanRec);
-  $('mic-visual').classList.remove('listening');
-  goToScanEdit(scanFinalText.trim());
+  if(scanRec) stopRecognizer(scanRec); // triggers the onend handler above
 }
 function goToScanEdit(text){
   $('scan-voice-view').style.display='none';
@@ -797,13 +829,13 @@ function goToScanEdit(text){
 }
 $('btn-manual-type').addEventListener('click', ()=>{
   if(scanRec){ scanListening=false; stopRecognizer(scanRec); }
-  goToScanEdit('');
+  goToScanEdit(scanAccumulated);
 });
 
 $('btn-retake').addEventListener('click', ()=>{
   $('scan-edit-view').style.display='none';
   $('scan-voice-view').style.display='';
-  resetScanVoiceUI();
+  resetScanVoiceUI($('address-text').value.trim());
 });
 
 $('btn-find-address').addEventListener('click', async ()=>{
@@ -945,7 +977,7 @@ function showRoute(){
 $('route-back').addEventListener('click', ()=>show('screen-dashboard'));
 
 /* ===================== rescan / match (voice input) ===================== */
-let rescanRec = null, rescanListening = false, rescanFinalText = '';
+let rescanRec = null, rescanListening = false;
 
 $('btn-rescan').addEventListener('click', ()=>{
   resetRescanVoiceUI();
@@ -959,7 +991,6 @@ $('rescan-back').addEventListener('click', ()=>{
   show('screen-dashboard');
 });
 function resetRescanVoiceUI(){
-  rescanFinalText = '';
   $('rescan-voice-transcript').textContent = '';
   $('rescan-voice-status').textContent = 'دکمه را بزن و آدرس را واضح بگو';
   $('rescan-mic-visual').classList.remove('listening');
@@ -974,24 +1005,30 @@ function startRescanMic(){
     openRescanManual();
     return;
   }
-  rescanFinalText = '';
   $('rescan-voice-transcript').textContent = '';
   $('rescan-mic-visual').classList.add('listening');
   $('rescan-voice-status').textContent = 'در حال گوش دادن…';
-  $('btn-rescan-mic-toggle').textContent = '⏹️ پایان و تطبیق';
+  $('btn-rescan-mic-toggle').textContent = '⏹️ توقف';
   rescanListening = true;
+  let utterance = '';
   rescanRec = createRecognizer(
-    (finalT, interim)=>{ rescanFinalText = finalT; $('rescan-voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
-    ()=>{ if(rescanListening){ startRecognizer(rescanRec); } },
-    (err)=>{ if(err !== 'no-speech') console.warn('speech error', err); }
+    (finalT, interim)=>{ utterance = finalT; $('rescan-voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
+    ()=>{ // fires once — natural silence or manual stop — never restarts
+      rescanListening = false;
+      $('rescan-mic-visual').classList.remove('listening');
+      matchSpokenAddress(utterance.trim());
+    },
+    (err)=>{
+      rescanListening = false;
+      $('rescan-mic-visual').classList.remove('listening');
+      if(err !== 'no-speech'){ console.warn('speech error', err); toast('مشکلی در تشخیص گفتار پیش آمد.'); }
+      resetRescanVoiceUI();
+    }
   );
   startRecognizer(rescanRec);
 }
 function stopRescanMic(){
-  rescanListening = false;
-  if(rescanRec) stopRecognizer(rescanRec);
-  $('rescan-mic-visual').classList.remove('listening');
-  matchSpokenAddress(rescanFinalText.trim());
+  if(rescanRec) stopRecognizer(rescanRec); // triggers the onend handler above
 }
 function matchSpokenAddress(text){
   $('rescan-voice-view').style.display='none';
