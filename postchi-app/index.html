@@ -691,26 +691,6 @@ $('btn-clear').addEventListener('click', ()=>{
 /* ===================== speech recognition (shared) ===================== */
 function supportsSpeech(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
 
-// Grab our own mic track with the browser's noise-suppression / echo-cancellation /
-// auto-gain constraints turned on, so background noise (traffic, wind, other people
-// talking) is filtered before it ever reaches the speech recognizer — instead of
-// letting the recognizer open the mic itself with default (often weaker) settings.
-async function getEnhancedMicTrack(){
-  try{
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        noiseSuppression: true,
-        echoCancellation: true,
-        autoGainControl: true
-      }
-    });
-    return stream.getAudioTracks()[0] || null;
-  }catch(e){
-    console.warn('enhanced mic track unavailable, using default mic', e);
-    return null;
-  }
-}
-
 function createRecognizer(onUpdate, onEnd, onError){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SR();
@@ -733,26 +713,17 @@ function createRecognizer(onUpdate, onEnd, onError){
   return rec;
 }
 
-// Starts recognition using a noise-suppressed mic track when the browser supports
-// binding one (newer Chrome); silently falls back to the recognizer's own default
-// mic access otherwise — either way the caller doesn't need to know which happened.
-async function startRecognizerFocused(rec, trackHolder){
-  const track = await getEnhancedMicTrack();
-  if(track){
-    trackHolder.track = track;
-    try{ rec.start(track); return; }catch(e){ /* fall through to default start */ }
-  }
-  try{ rec.start(); }catch(e){ /* already started, ignore */ }
-}
-function stopRecognizerFocused(rec, trackHolder){
-  try{ rec.stop(); }catch(e){}
-  if(trackHolder.track){ try{ trackHolder.track.stop(); }catch(e){} trackHolder.track = null; }
-}
+// The browser's own SpeechRecognition already opens the mic with reasonable
+// noise handling on Android — earlier this tried to hand it a separately
+// captured, noise-suppressed track, but binding a custom track this way isn't
+// reliably supported and silently produced no transcript. Plain start()/stop()
+// is what actually works across devices, so we keep it simple here.
+function startRecognizer(rec){ try{ rec.start(); }catch(e){ /* already started, ignore */ } }
+function stopRecognizer(rec){ try{ rec.stop(); }catch(e){} }
 
 /* ===================== scan flow state (voice input) ===================== */
 let pendingSave = null; // {editedText, coords, formatted}
 let scanRec = null, scanListening = false, scanFinalText = '';
-const scanTrackHolder = { track: null };
 
 $('btn-new-scan').addEventListener('click', async ()=>{
   resetScanUI();
@@ -786,7 +757,7 @@ function resetScanVoiceUI(){
 }
 
 $('scan-back').addEventListener('click', ()=>{
-  if(scanRec){ scanListening=false; stopRecognizerFocused(scanRec, scanTrackHolder); }
+  if(scanRec){ scanListening=false; stopRecognizer(scanRec); }
   refreshDashboard();
   show('screen-dashboard');
 });
@@ -808,14 +779,14 @@ function startScanMic(){
   scanListening = true;
   scanRec = createRecognizer(
     (finalT, interim)=>{ scanFinalText = finalT; $('voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
-    ()=>{ if(scanListening){ startRecognizerFocused(scanRec, scanTrackHolder); } }, // auto-restart if browser stopped from silence but user hasn't tapped stop
+    ()=>{ if(scanListening){ startRecognizer(scanRec); } }, // auto-restart if browser stopped from silence but user hasn't tapped stop
     (err)=>{ if(err !== 'no-speech') console.warn('speech error', err); }
   );
-  startRecognizerFocused(scanRec, scanTrackHolder);
+  startRecognizer(scanRec);
 }
 function stopScanMic(){
   scanListening = false;
-  if(scanRec) stopRecognizerFocused(scanRec, scanTrackHolder);
+  if(scanRec) stopRecognizer(scanRec);
   $('mic-visual').classList.remove('listening');
   goToScanEdit(scanFinalText.trim());
 }
@@ -825,7 +796,7 @@ function goToScanEdit(text){
   $('address-text').value = text;
 }
 $('btn-manual-type').addEventListener('click', ()=>{
-  if(scanRec){ scanListening=false; stopRecognizerFocused(scanRec, scanTrackHolder); }
+  if(scanRec){ scanListening=false; stopRecognizer(scanRec); }
   goToScanEdit('');
 });
 
@@ -975,7 +946,6 @@ $('route-back').addEventListener('click', ()=>show('screen-dashboard'));
 
 /* ===================== rescan / match (voice input) ===================== */
 let rescanRec = null, rescanListening = false, rescanFinalText = '';
-const rescanTrackHolder = { track: null };
 
 $('btn-rescan').addEventListener('click', ()=>{
   resetRescanVoiceUI();
@@ -985,7 +955,7 @@ $('btn-rescan').addEventListener('click', ()=>{
   show('screen-rescan');
 });
 $('rescan-back').addEventListener('click', ()=>{
-  if(rescanRec){ rescanListening=false; stopRecognizerFocused(rescanRec, rescanTrackHolder); }
+  if(rescanRec){ rescanListening=false; stopRecognizer(rescanRec); }
   show('screen-dashboard');
 });
 function resetRescanVoiceUI(){
@@ -1012,14 +982,14 @@ function startRescanMic(){
   rescanListening = true;
   rescanRec = createRecognizer(
     (finalT, interim)=>{ rescanFinalText = finalT; $('rescan-voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
-    ()=>{ if(rescanListening){ startRecognizerFocused(rescanRec, rescanTrackHolder); } },
+    ()=>{ if(rescanListening){ startRecognizer(rescanRec); } },
     (err)=>{ if(err !== 'no-speech') console.warn('speech error', err); }
   );
-  startRecognizerFocused(rescanRec, rescanTrackHolder);
+  startRecognizer(rescanRec);
 }
 function stopRescanMic(){
   rescanListening = false;
-  if(rescanRec) stopRecognizerFocused(rescanRec, rescanTrackHolder);
+  if(rescanRec) stopRecognizer(rescanRec);
   $('rescan-mic-visual').classList.remove('listening');
   matchSpokenAddress(rescanFinalText.trim());
 }
@@ -1052,7 +1022,7 @@ $('btn-rescan-again').addEventListener('click', ()=>{
 $('btn-rescan-wrong').addEventListener('click', openRescanManual);
 
 function openRescanManual(){
-  if(rescanRec){ rescanListening=false; stopRecognizerFocused(rescanRec, rescanTrackHolder); }
+  if(rescanRec){ rescanListening=false; stopRecognizer(rescanRec); }
   $('rescan-voice-view').style.display='none';
   $('rescan-result-view').style.display='none';
   $('rescan-manual-view').style.display='';
