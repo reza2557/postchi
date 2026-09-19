@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مرتب سازی بسته های پستچی</title>
+<meta name="theme-color" content="#2F6F5E">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --paper:#EDE9DE;
+  --ink:#1F2A24;
+  --ink-soft:#4b5750;
+  --primary:#2F6F5E;
+  --primary-dark:#20463b;
+  --accent:#C97A2B;
+  --accent-dark:#a5611f;
+  --success:#3A7D44;
+  --danger:#B23A32;
+  --surface:#FFFFFF;
+  --border:#d8d2c2;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Vazirmatn', sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  min-height:100vh;
+  -webkit-tap-highlight-color:transparent;
+}
+.app{
+  max-width:480px;
+  margin:0 auto;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  background:var(--paper);
+  position:relative;
+}
+.topbar{
+  padding:18px 20px 10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.wordmark{
+  font-weight:700;
+  font-size:1.02rem;
+  color:var(--primary-dark);
+  letter-spacing:-.2px;
+}
+.wordmark small{
+  display:block;
+  font-weight:400;
+  font-size:.68rem;
+  color:var(--ink-soft);
+  margin-top:1px;
+}
+.iconbtn{
+  width:38px;height:38px;
+  border-radius:9px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.05rem;
+  cursor:pointer;
+  color:var(--ink);
+}
+main{
+  flex:1;
+  padding:6px 20px 100px;
+}
+h1{font-size:1.4rem;font-weight:700;margin:6px 0 4px;color:var(--primary-dark);}
+h2{font-size:1.05rem;font-weight:600;margin:0 0 10px;}
+p.lead{color:var(--ink-soft);font-size:.9rem;line-height:1.9;margin:0 0 18px;}
+
+.stat-row{display:flex;gap:10px;margin-bottom:18px;}
+.stat{
+  flex:1;
+  background:var(--surface);
+  border-radius:8px;
+  border-inline-start:3px solid var(--primary);
+  padding:12px 14px;
+}
+.stat .num{font-size:1.5rem;font-weight:700;color:var(--primary-dark);line-height:1;}
+.stat .label{font-size:.72rem;color:var(--ink-soft);margin-top:6px;}
+
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;
+  padding:15px 16px;
+  border-radius:10px;
+  border:none;
+  font-family:inherit;
+  font-size:.98rem;
+  font-weight:600;
+  cursor:pointer;
+  margin-bottom:12px;
+}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:active{background:var(--primary-dark);}
+.btn-accent{background:var(--accent);color:#fff;}
+.btn-accent:active{background:var(--accent-dark);}
+.btn-ghost{background:var(--surface);color:var(--ink);border:1px solid var(--border);}
+.btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+.btn-sm{padding:10px 14px;font-size:.85rem;margin-bottom:0;}
+.btn[disabled]{opacity:.5;cursor:default;}
+
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:16px;
+  margin-bottom:14px;
+}
+
+label.field-label{display:block;font-size:.8rem;color:var(--ink-soft);margin-bottom:6px;}
+input[type=text],input[type=password],textarea{
+  width:100%;
+  font-family:inherit;
+  font-size:.95rem;
+  padding:12px 13px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:#fff;
+  color:var(--ink);
+  resize:vertical;
+}
+textarea{min-height:90px;line-height:1.8;}
+.field{margin-bottom:14px;}
+
+.camera-box{
+  position:relative;
+  width:100%;
+  aspect-ratio:4/3;
+  background:#0b0f0d;
+  border-radius:12px;
+  overflow:hidden;
+  margin-bottom:14px;
+}
+.camera-box video, .camera-box img.preview{
+  width:100%;height:100%;object-fit:cover;display:block;
+}
+.camera-box .guide{
+  position:absolute;inset:10%;
+  border:2px dashed rgba(255,255,255,.55);
+  border-radius:10px;
+  pointer-events:none;
+}
+.shutter-wrap{display:flex;justify-content:center;margin:-4px 0 16px;}
+.shutter{
+  width:66px;height:66px;border-radius:50%;
+  background:#fff;border:4px solid var(--primary);
+  cursor:pointer;
+}
+.shutter:active{background:var(--paper);}
+
+.map-thumb{
+  width:100%;height:170px;border-radius:10px;overflow:hidden;
+  border:1px solid var(--border);margin-bottom:12px;background:#e4e0d3;
+}
+
+.result-item{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:13px 4px;border-bottom:1px solid var(--border);
+  cursor:pointer;
+}
+.result-item:last-child{border-bottom:none;}
+.result-item .t{font-weight:600;font-size:.92rem;}
+.result-item .d{font-size:.78rem;color:var(--ink-soft);margin-top:3px;}
+.result-item .pick{color:var(--primary);font-size:.82rem;font-weight:600;white-space:nowrap;}
+
+.stop-row{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:13px 2px;border-bottom:1px solid var(--border);
+}
+.stop-row:last-child{border-bottom:none;}
+.stop-num{
+  min-width:40px;height:40px;border-radius:8px;
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:.85rem;flex-shrink:0;
+}
+.stop-body .addr{font-size:.9rem;line-height:1.6;}
+.stop-body .meta{font-size:.74rem;color:var(--ink-soft);margin-top:3px;}
+
+.badge{
+  display:inline-block;font-size:.72rem;padding:3px 9px;border-radius:20px;
+  background:var(--primary);color:#fff;
+}
+.badge.warn{background:var(--accent);}
+
+.footer-credit{
+  text-align:center;
+  font-size:.68rem;
+  color:#8a8577;
+  padding:16px 20px 22px;
+  letter-spacing:.2px;
+}
+
+.bottombar{
+  position:sticky;bottom:0;
+  background:linear-gradient(to top, var(--paper) 70%, transparent);
+  padding:14px 20px 10px;
+}
+
+.status-msg{
+  text-align:center;font-size:.85rem;color:var(--ink-soft);
+  padding:10px 0;
+}
+.center-box{
+  text-align:center;padding:40px 10px;
+}
+.center-box .big{font-size:2.4rem;margin-bottom:10px;}
+
+.screen{display:none;}
+.screen.active{display:block;}
+
+a{color:var(--primary);}
+
+.spinner{
+  width:22px;height:22px;border-radius:50%;
+  border:3px solid rgba(255,255,255,.4);
+  border-top-color:#fff;
+  animation:spin .8s linear infinite;
+  display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;
+  font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .25s;
+  z-index:50; max-width:90%; text-align:center;
+}
+.toast.show{opacity:1;}
+
+.link-row{text-align:center;margin-top:10px;}
+.link-row a{font-size:.85rem;}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- LOGIN -->
+  <section class="screen" id="screen-login">
+    <div class="topbar"><div></div><div></div></div>
+    <main>
+      <div class="center-box" style="padding-top:14%;">
+        <div class="big">📮</div>
+        <h1>مرتب سازی بسته‌های پستچی</h1>
+        <p class="lead">ورود شعبه</p>
+      </div>
+      <div class="card">
+        <div class="field">
+          <label class="field-label">نام کاربری</label>
+          <input type="text" id="login-user" placeholder="نام کاربری شعبه">
+        </div>
+        <div class="field">
+          <label class="field-label">رمز عبور</label>
+          <input type="password" id="login-pass" placeholder="رمز عبور">
+        </div>
+        <button class="btn btn-primary" id="btn-login">ورود</button>
+        <div id="login-error" style="color:var(--danger);font-size:.82rem;display:none;"></div>
+      </div>
+      <p class="lead" style="font-size:.78rem;">اطلاعات هر شعبه فقط روی همین گوشی ذخیره می‌شود و شعبه‌های دیگر آن را نمی‌بینند.</p>
+    </main>
+    <div class="footer-credit">تهیه و تولید توسط: mohamadreza.hooshiarzadeh@gmail.com</div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section class="screen" id="screen-dashboard">
+    <div class="topbar">
+      <div class="wordmark">مرتب‌سازی بسته‌های پستچی<small id="branch-label"></small></div>
+      <div class="iconbtn" id="btn-settings">⚙️</div>
+    </div>
+    <main>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="stat-count">0</div><div class="label">آدرس اسکن‌شده</div></div>
+        <div class="stat"><div class="num" id="stat-status">—</div><div class="label">وضعیت مسیر</div></div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-new-scan">📷 شروع اسکن آدرس جدید</button>
+      <button class="btn btn-accent" id="btn-sort" disabled>🧭 مرتب‌سازی مسیر</button>
+      <button class="btn btn-ghost" id="btn-view-route" disabled>📋 نمایش مسیر مرتب‌شده</button>
+      <button class="btn btn-ghost" id="btn-rescan" disabled>🔎 پیدا کردن شماره توقف (اسکن دوباره)</button>
+      <button class="btn btn-danger" id="btn-clear">🗑️ پاک کردن همه‌ی اطلاعات امروز</button>
+
+      <div class="card" style="margin-top:18px;">
+        <h2 style="font-size:.9rem;">راهنمای سریع</h2>
+        <p class="lead" style="margin-bottom:0;font-size:.82rem;">
+          ۱) اسکن آدرس‌ها یکی‌یکی با دوربین<br>
+          ۲) بعد از تمام‌شدن، «مرتب‌سازی مسیر» را بزنید<br>
+          ۳) هنگام رانندگی برای پیدا کردن شماره‌ی هر بسته، از «پیدا کردن شماره توقف» استفاده کنید<br>
+          ۴) در پایان روز با «پاک کردن همه‌ی اطلاعات» صفحه را برای فردا خالی کنید
+        </p>
+      </div>
+    </main>
+    <div class="footer-credit">تهیه و تولید توسط: mohamadreza.hooshiarzadeh@gmail.com</div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="screen" id="screen-settings">
+    <div class="topbar">
+      <div class="iconbtn" id="settings-back">➜</div>
+      <div class="wordmark">تنظیمات</div>
+    </div>
+    <main>
+      <div class="card">
+        <h2>کلید Neshan API</h2>
+        <p class="lead" style="font-size:.82rem;">کلید رایگانی که از وب‌سایت نشان گرفته‌اید را اینجا وارد کنید تا آدرس‌یابی دقیق‌تر انجام شود. بدون این کلید، از نقشه‌ی آزاد (OpenStreetMap) استفاده می‌شود که برای برخی آدرس‌های ایران دقت کمتری دارد.</p>
+        <div class="field">
+          <input type="text" id="input-neshan-key" placeholder="کلید API نشان">
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-save-key" style="width:auto;padding-inline:22px;">ذخیره کلید</button>
+      </div>
+
+      <div class="card">
+        <h2>تغییر رمز عبور شعبه</h2>
+        <div class="field">
+          <input type="text" id="input-new-user" placeholder="نام کاربری جدید">
+        </div>
+        <div class="field">
+          <input type="password" id="input-new-pass" placeholder="رمز عبور جدید">
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-save-cred" style="width:auto;padding-inline:22px;">ذخیره</button>
+      </div>
+
+      <div class="card">
+        <h2>حجم داده‌ی ذخیره‌شده</h2>
+        <p class="lead" style="font-size:.82rem;margin-bottom:0;" id="storage-info">در حال محاسبه…</p>
+      </div>
+    </main>
+    <div class="footer-credit">تهیه و تولید توسط: mohamadreza.hooshiarzadeh@gmail.com</div>
+  </section>
+
+  <!-- SCAN -->
+  <section class="screen" id="screen-scan">
+    <div class="topbar">
+      <div class="iconbtn" id="scan-back">➜</div>
+      <div class="wordmark">اسکن آدرس <small id="scan-progress-label"></small></div>
+    </div>
+    <main>
+      <div id="scan-camera-view">
+        <div class="camera-box">
+          <video id="scan-video" autoplay playsinline muted></video>
+          <div class="guide"></div>
+        </div>
+        <div class="shutter-wrap"><div class="shutter" id="btn-capture"></div></div>
+        <input type="file" id="file-fallback" accept="image/*" capture="environment" style="display:none;">
+        <div class="link-row"><a href="#" id="link-file-fallback">اگر دوربین باز نشد، از اینجا عکس بگیرید</a></div>
+      </div>
+
+      <div id="scan-ocr-view" style="display:none;">
+        <div class="camera-box"><img class="preview" id="captured-preview" alt="عکس گرفته‌شده"></div>
+        <div class="status-msg" id="ocr-status"><span class="spinner"></span> در حال خواندن متن…</div>
+      </div>
+
+      <div id="scan-edit-view" style="display:none;">
+        <div class="camera-box" style="aspect-ratio:16/8;"><img class="preview" id="captured-preview-2" alt="عکس گرفته‌شده"></div>
+        <div class="field">
+          <label class="field-label">متن آدرس (قابل ویرایش)</label>
+          <textarea id="address-text"></textarea>
+        </div>
+        <button class="btn btn-accent" id="btn-find-address">📍 پیدا کردن آدرس</button>
+        <button class="btn btn-ghost" id="btn-retake">🔄 گرفتن مجدد عکس</button>
+      </div>
+
+      <div id="scan-searching-view" style="display:none;">
+        <div class="status-msg" style="padding:50px 0;"><span class="spinner" style="border-top-color:var(--primary);border-color:rgba(47,111,94,.25);"></span><br><br>در حال جستجوی آدرس…</div>
+      </div>
+
+      <div id="scan-results-view" style="display:none;">
+        <h2 style="font-size:.92rem;">چند نتیجه پیدا شد — مورد درست را انتخاب کنید</h2>
+        <div class="card" id="results-list"></div>
+        <button class="btn btn-ghost" id="btn-results-back">✏️ ویرایش متن آدرس</button>
+      </div>
+
+      <div id="scan-confirm-view" style="display:none;">
+        <div class="map-thumb" id="confirm-map"></div>
+        <div class="card">
+          <div class="badge" id="confirm-badge">آدرس پیدا شد</div>
+          <p style="margin:10px 0 0;font-size:.92rem;line-height:1.8;" id="confirm-address"></p>
+        </div>
+        <button class="btn btn-primary" id="btn-save-next">✅ ذخیره و اسکن بعدی</button>
+        <button class="btn btn-ghost" id="btn-confirm-edit">✏️ ویرایش دوباره</button>
+      </div>
+
+      <div id="scan-notfound-view" style="display:none;">
+        <div class="card" style="border-color:var(--danger);">
+          <div class="badge warn">آدرس پیدا نشد</div>
+          <p style="margin:10px 0 0;font-size:.88rem;">نتوانستیم این آدرس را پیدا کنیم. متن را ویرایش کنید یا دوباره امتحان کنید.</p>
+        </div>
+        <button class="btn btn-ghost" id="btn-notfound-edit">✏️ ویرایش متن آدرس</button>
+      </div>
+    </main>
+  </section>
+
+  <!-- SORTED ROUTE -->
+  <section class="screen" id="screen-route">
+    <div class="topbar">
+      <div class="iconbtn" id="route-back">➜</div>
+      <div class="wordmark">مسیر مرتب‌شده <small id="route-count-label"></small></div>
+    </div>
+    <main>
+      <div class="map-thumb" id="route-map" style="height:210px;"></div>
+      <div class="card" id="route-list" style="padding:6px 16px;"></div>
+    </main>
+    <div class="footer-credit">تهیه و تولید توسط: mohamadreza.hooshiarzadeh@gmail.com</div>
+  </section>
+
+  <!-- RESCAN / MATCH -->
+  <section class="screen" id="screen-rescan">
+    <div class="topbar">
+      <div class="iconbtn" id="rescan-back">➜</div>
+      <div class="wordmark">پیدا کردن شماره توقف</div>
+    </div>
+    <main>
+      <div id="rescan-camera-view">
+        <div class="camera-box">
+          <video id="rescan-video" autoplay playsinline muted></video>
+          <div class="guide"></div>
+        </div>
+        <div class="shutter-wrap"><div class="shutter" id="btn-rescan-capture"></div></div>
+      </div>
+      <div id="rescan-result-view" style="display:none;">
+        <div class="center-box">
+          <div class="big" id="rescan-stop-num">—</div>
+          <p class="lead" id="rescan-matched-addr"></p>
+        </div>
+        <button class="btn btn-primary" id="btn-rescan-again">📷 اسکن آدرس بعدی</button>
+      </div>
+    </main>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+/* ===================== helpers ===================== */
+const $ = (id) => document.getElementById(id);
+function show(screenId){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(screenId).classList.add('active');
+}
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove('show'), 2400);
+}
+function haversineKm(a,b){
+  const R=6371, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+function normalizeFa(s){
+  return (s||'').replace(/[يى]/g,'ی').replace(/ك/g,'ک').replace(/[\u064B-\u0652]/g,'')
+    .replace(/[^\u0600-\u06FFa-zA-Z0-9\s]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+}
+function textSimilarity(a,b){
+  const ta=new Set(normalizeFa(a).split(' ').filter(Boolean));
+  const tb=new Set(normalizeFa(b).split(' ').filter(Boolean));
+  if(!ta.size||!tb.size) return 0;
+  let common=0; ta.forEach(t=>{ if(tb.has(t)) common++; });
+  return common/Math.max(ta.size,tb.size);
+}
+
+/* ===================== local storage (per-branch db) ===================== */
+function authKey(){ return 'postchi_auth'; }
+function getAuth(){
+  const raw = localStorage.getItem(authKey());
+  if(raw) return JSON.parse(raw);
+  const def = {username:'admin', password:'1234'};
+  localStorage.setItem(authKey(), JSON.stringify(def));
+  return def;
+}
+function setAuth(u,p){ localStorage.setItem(authKey(), JSON.stringify({username:u,password:p})); }
+
+function dbKeyFor(username){ return `postchi_db_${username}`; }
+let CURRENT_USER = null;
+let DB = { addresses: [], startLoc: null, sorted:false };
+
+function loadDB(){
+  const raw = localStorage.getItem(dbKeyFor(CURRENT_USER));
+  DB = raw ? JSON.parse(raw) : { addresses: [], startLoc: null, sorted:false };
+}
+function saveDB(){
+  localStorage.setItem(dbKeyFor(CURRENT_USER), JSON.stringify(DB));
+}
+function clearDB(){
+  DB = { addresses: [], startLoc: null, sorted:false };
+  saveDB();
+}
+
+function getNeshanKey(){ return localStorage.getItem('postchi_neshan_key') || ''; }
+function setNeshanKey(k){ localStorage.setItem('postchi_neshan_key', k); }
+
+/* ===================== geocoding ===================== */
+function extractCoordsFromItem(it){
+  const loc = it.location || it.position || {};
+  if(typeof loc.y === 'number' && typeof loc.x === 'number') return {lat:loc.y, lng:loc.x};
+  if(typeof loc.lat === 'number' && typeof loc.lng === 'number') return {lat:loc.lat, lng:loc.lng};
+  if(typeof it.lat === 'number' && typeof it.lng === 'number') return {lat:it.lat, lng:it.lng};
+  return null;
+}
+
+async function neshanSearch(term, bias, apiKey){
+  const lat = bias ? bias.lat : 29.5926;
+  const lng = bias ? bias.lng : 52.5836;
+  const url = `https://api.neshan.org/v1/search?term=${encodeURIComponent(term)}&lat=${lat}&lng=${lng}`;
+  const res = await fetch(url, { headers: { 'Api-Key': apiKey } });
+  if(!res.ok) throw new Error('neshan-http-'+res.status);
+  const data = await res.json();
+  const items = data.items || data.results || [];
+  return items.map(it=>({
+    title: it.title || it.name || term,
+    address: it.address || it.description || (it.title||''),
+    coords: extractCoordsFromItem(it)
+  })).filter(r=>r.coords);
+}
+
+async function nominatimSearch(term, bias){
+  let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(term+' ایران')}&limit=6`;
+  if(bias){
+    const d = 0.2;
+    url += `&viewbox=${bias.lng-d},${bias.lat+d},${bias.lng+d},${bias.lat-d}&bounded=0`;
+  }
+  const res = await fetch(url, { headers: { 'Accept-Language':'fa' } });
+  if(!res.ok) throw new Error('nominatim-http-'+res.status);
+  const data = await res.json();
+  return data.map(it=>({
+    title: (it.display_name||'').split(',')[0],
+    address: it.display_name,
+    coords: { lat: parseFloat(it.lat), lng: parseFloat(it.lon) }
+  }));
+}
+
+async function searchPlace(term, bias){
+  const key = getNeshanKey();
+  if(key){
+    try{
+      const r = await neshanSearch(term, bias, key);
+      if(r.length) return r;
+    }catch(e){ console.warn('neshan search failed, falling back', e); }
+  }
+  try{ return await nominatimSearch(term, bias); }
+  catch(e){ console.warn('nominatim failed', e); return []; }
+}
+
+// Hierarchical geocode: narrow to locality first, then search the specific
+// place/complex name within that locality, so a search for "مجتمع رضوان"
+// inside "فارس، شیراز، صدرا، مجتمع رضوان" stays inside صدرا instead of
+// scanning the whole city/province.
+async function hierarchicalGeocode(rawText, startLoc){
+  const parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  let bias = startLoc || null;
+  if(parts.length >= 2){
+    const localityQuery = parts.slice(0, -1).join(' ');
+    try{
+      const localityResults = await searchPlace(localityQuery, bias);
+      if(localityResults.length) bias = localityResults[0].coords;
+    }catch(e){ /* keep previous bias */ }
+  }
+  const specificQuery = parts.length ? parts[parts.length-1] : rawText;
+  let results = await searchPlace(specificQuery, bias);
+  if(!results.length){
+    results = await searchPlace(rawText, bias); // fallback: try the whole raw text
+  }
+  return results;
+}
+
+/* ===================== leaflet map helpers ===================== */
+function renderSmallMap(containerId, point, extraPoints){
+  const el = $(containerId);
+  el.innerHTML = '';
+  const map = L.map(el, {zoomControl:false, attributionControl:false, dragging:true, scrollWheelZoom:false}).setView([point.lat, point.lng], 15);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  L.marker([point.lat, point.lng]).addTo(map);
+  (extraPoints||[]).forEach((p,i)=>{
+    L.circleMarker([p.lat,p.lng], {radius:5, color:'#2F6F5E', fillColor:'#2F6F5E', fillOpacity:1})
+      .addTo(map).bindTooltip(String(p.label||i+1), {permanent:false});
+  });
+  setTimeout(()=>map.invalidateSize(), 150);
+  return map;
+}
+
+/* ===================== auth screens ===================== */
+$('btn-login').addEventListener('click', ()=>{
+  const u = $('login-user').value.trim();
+  const p = $('login-pass').value;
+  const auth = getAuth();
+  if(u === auth.username && p === auth.password){
+    CURRENT_USER = u;
+    loadDB();
+    $('branch-label').textContent = ' — ' + u;
+    refreshDashboard();
+    show('screen-dashboard');
+  } else {
+    $('login-error').style.display = 'block';
+    $('login-error').textContent = 'نام کاربری یا رمز عبور اشتباه است.';
+  }
+});
+
+/* ===================== dashboard ===================== */
+function refreshDashboard(){
+  $('stat-count').textContent = DB.addresses.length;
+  $('stat-status').textContent = DB.sorted ? 'مرتب‌شده' : (DB.addresses.length ? 'در حال اسکن' : '—');
+  $('btn-sort').disabled = DB.addresses.length < 1;
+  $('btn-view-route').disabled = !DB.sorted;
+  $('btn-rescan').disabled = !DB.sorted;
+}
+$('btn-settings').addEventListener('click', ()=>{
+  $('input-neshan-key').value = getNeshanKey();
+  updateStorageInfo();
+  show('screen-settings');
+});
+$('settings-back').addEventListener('click', ()=>show('screen-dashboard'));
+$('btn-save-key').addEventListener('click', ()=>{
+  setNeshanKey($('input-neshan-key').value.trim());
+  toast('کلید ذخیره شد.');
+});
+$('btn-save-cred').addEventListener('click', ()=>{
+  const u = $('input-new-user').value.trim(), p = $('input-new-pass').value;
+  if(!u || !p){ toast('نام کاربری و رمز را وارد کنید.'); return; }
+  setAuth(u,p);
+  toast('اطلاعات ورود به‌روزرسانی شد.');
+});
+function updateStorageInfo(){
+  const bytes = new Blob([JSON.stringify(DB)]).size;
+  $('storage-info').textContent = `حدود ${(bytes/1024).toFixed(1)} کیلوبایت از داده‌های امروز ذخیره شده است.`;
+}
+$('btn-clear').addEventListener('click', ()=>{
+  if(confirm('همه‌ی آدرس‌های امروز پاک شود؟ این کار قابل بازگشت نیست.')){
+    clearDB();
+    refreshDashboard();
+    toast('اطلاعات پاک شد.');
+  }
+});
+
+/* ===================== scan flow state ===================== */
+let scanStream = null;
+let capturedDataUrl = null;
+let currentGeocodeResults = [];
+let pendingSave = null; // {editedText, coords, formatted}
+
+async function startCamera(videoEl){
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
+    videoEl.srcObject = scanStream;
+  }catch(e){
+    console.warn('camera error', e);
+    toast('دسترسی به دوربین ممکن نشد؛ از گزینه‌ی جایگزین استفاده کنید.');
+  }
+}
+function stopCamera(){
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+}
+
+async function captureFrame(videoEl, quality){
+  const canvas = document.createElement('canvas');
+  // Keep the working image small on purpose: faster OCR, faster upload.
+  const targetW = 900;
+  const scale = targetW / videoEl.videoWidth;
+  canvas.width = targetW;
+  canvas.height = videoEl.videoHeight * scale;
+  canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', quality || 0.6);
+}
+
+$('btn-new-scan').addEventListener('click', async ()=>{
+  resetScanUI();
+  show('screen-scan');
+  if(!DB.startLoc){
+    try{
+      const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:8000}));
+      DB.startLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      saveDB();
+      toast('موقعیت شروع مسیر ثبت شد.');
+    }catch(e){ toast('نتوانستیم موقعیت فعلی را بگیریم؛ می‌توانید بعداً دوباره تلاش کنید.'); }
+  }
+  await startCamera($('scan-video'));
+});
+
+function resetScanUI(){
+  $('scan-camera-view').style.display='';
+  $('scan-ocr-view').style.display='none';
+  $('scan-edit-view').style.display='none';
+  $('scan-searching-view').style.display='none';
+  $('scan-results-view').style.display='none';
+  $('scan-confirm-view').style.display='none';
+  $('scan-notfound-view').style.display='none';
+  $('scan-progress-label').textContent = ` — ${DB.addresses.length} ذخیره‌شده`;
+}
+
+$('scan-back').addEventListener('click', ()=>{ stopCamera(); refreshDashboard(); show('screen-dashboard'); });
+
+$('link-file-fallback').addEventListener('click', (e)=>{ e.preventDefault(); $('file-fallback').click(); });
+$('file-fallback').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ capturedDataUrl = reader.result; afterCapture(); };
+  reader.readAsDataURL(f);
+});
+
+$('btn-capture').addEventListener('click', async ()=>{
+  const v = $('scan-video');
+  if(!v.videoWidth){ toast('دوربین هنوز آماده نیست…'); return; }
+  capturedDataUrl = await captureFrame(v, 0.55);
+  afterCapture();
+});
+
+async function afterCapture(){
+  stopCamera();
+  $('scan-camera-view').style.display='none';
+  $('scan-ocr-view').style.display='';
+  $('captured-preview').src = capturedDataUrl;
+  $('ocr-status').innerHTML = '<span class="spinner" style="border-top-color:var(--primary);border-color:rgba(47,111,94,.25);"></span> در حال خواندن متن…';
+  try{
+    const { data } = await Tesseract.recognize(capturedDataUrl, 'fas+eng');
+    const text = (data.text||'').trim();
+    $('scan-ocr-view').style.display='none';
+    $('scan-edit-view').style.display='';
+    $('captured-preview-2').src = capturedDataUrl;
+    $('address-text').value = text;
+  }catch(e){
+    console.error(e);
+    $('scan-ocr-view').style.display='none';
+    $('scan-edit-view').style.display='';
+    $('captured-preview-2').src = capturedDataUrl;
+    $('address-text').value = '';
+    toast('خواندن خودکار متن ممکن نشد؛ آدرس را دستی وارد کنید.');
+  }
+}
+
+$('btn-retake').addEventListener('click', async ()=>{
+  $('scan-edit-view').style.display='none';
+  $('scan-camera-view').style.display='';
+  await startCamera($('scan-video'));
+});
+
+$('btn-find-address').addEventListener('click', async ()=>{
+  const text = $('address-text').value.trim();
+  if(!text){ toast('متن آدرس خالی است.'); return; }
+  $('scan-edit-view').style.display='none';
+  $('scan-searching-view').style.display='';
+  try{
+    const results = await hierarchicalGeocode(text, DB.startLoc);
+    currentGeocodeResults = results;
+    $('scan-searching-view').style.display='none';
+    if(!results.length){
+      $('scan-notfound-view').style.display='';
+    } else if(results.length === 1){
+      showConfirm(results[0], text);
+    } else {
+      showResultsList(results, text);
+    }
+  }catch(e){
+    console.error(e);
+    $('scan-searching-view').style.display='none';
+    $('scan-notfound-view').style.display='';
+  }
+});
+
+$('btn-notfound-edit').addEventListener('click', ()=>{
+  $('scan-notfound-view').style.display='none';
+  $('scan-edit-view').style.display='';
+});
+
+function showResultsList(results, originalText){
+  const wrap = $('results-list');
+  wrap.innerHTML = '';
+  results.slice(0,8).forEach((r)=>{
+    const row = document.createElement('div');
+    row.className = 'result-item';
+    row.innerHTML = `<div><div class="t">${r.title||''}</div><div class="d">${r.address||''}</div></div><div class="pick">انتخاب ›</div>`;
+    row.addEventListener('click', ()=> showConfirm(r, originalText));
+    wrap.appendChild(row);
+  });
+  $('scan-results-view').style.display='';
+}
+$('btn-results-back').addEventListener('click', ()=>{
+  $('scan-results-view').style.display='none';
+  $('scan-edit-view').style.display='';
+});
+
+function showConfirm(result, originalText){
+  pendingSave = { editedText: originalText, coords: result.coords, formatted: result.address || result.title };
+  $('scan-results-view').style.display='none';
+  $('scan-confirm-view').style.display='';
+  $('confirm-address').textContent = pendingSave.formatted || originalText;
+  renderSmallMap('confirm-map', result.coords);
+}
+$('btn-confirm-edit').addEventListener('click', ()=>{
+  $('scan-confirm-view').style.display='none';
+  $('scan-edit-view').style.display='';
+});
+
+$('btn-save-next').addEventListener('click', async ()=>{
+  if(!pendingSave) return;
+  DB.addresses.push({
+    id: 'a'+Date.now()+Math.floor(Math.random()*999),
+    text: pendingSave.editedText,
+    formatted: pendingSave.formatted,
+    coords: pendingSave.coords,
+    createdAt: Date.now()
+  });
+  DB.sorted = false;
+  saveDB();
+  pendingSave = null;
+  resetScanUI();
+  toast('آدرس ذخیره شد. آدرس بعدی را اسکن کنید.');
+  await startCamera($('scan-video'));
+});
+
+/* ===================== sorting ===================== */
+function clusterAndSort(startLoc, addresses, radiusKm){
+  radiusKm = radiusKm || 1;
+  let remaining = addresses.map(a=>({...a}));
+  let current = startLoc;
+  let stopIndex = 0;
+  const ordered = [];
+  while(remaining.length){
+    remaining.sort((a,b)=> haversineKm(current,a.coords) - haversineKm(current,b.coords));
+    const anchor = remaining[0];
+    const cluster = remaining.filter(a => haversineKm(anchor.coords, a.coords) <= radiusKm);
+    remaining = remaining.filter(a => !cluster.includes(a));
+    cluster.sort((a,b)=> haversineKm(anchor.coords,a.coords) - haversineKm(anchor.coords,b.coords));
+    stopIndex++;
+    cluster.forEach((m,idx)=>{
+      m.stopLabel = cluster.length > 1 ? `${stopIndex}-${idx+1}` : `${stopIndex}`;
+    });
+    ordered.push(...cluster);
+    current = cluster[cluster.length-1].coords;
+  }
+  return ordered;
+}
+
+$('btn-sort').addEventListener('click', ()=>{
+  if(!DB.addresses.length) return;
+  const start = DB.startLoc || DB.addresses[0].coords;
+  const sorted = clusterAndSort(start, DB.addresses, 1);
+  DB.addresses = sorted;
+  DB.sorted = true;
+  saveDB();
+  refreshDashboard();
+  toast('مسیر مرتب شد.');
+  showRoute();
+});
+$('btn-view-route').addEventListener('click', showRoute);
+
+function showRoute(){
+  $('route-count-label').textContent = ` — ${DB.addresses.length} توقف`;
+  const wrap = $('route-list');
+  wrap.innerHTML = '';
+  DB.addresses.forEach(a=>{
+    const row = document.createElement('div');
+    row.className = 'stop-row';
+    row.innerHTML = `<div class="stop-num">${a.stopLabel||''}</div>
+      <div class="stop-body"><div class="addr">${a.formatted||a.text}</div><div class="meta">${a.text}</div></div>`;
+    wrap.appendChild(row);
+  });
+  const start = DB.startLoc || (DB.addresses[0] && DB.addresses[0].coords);
+  if(start){
+    const points = DB.addresses.map(a=>({lat:a.coords.lat, lng:a.coords.lng, label:a.stopLabel}));
+    renderSmallMap('route-map', start, points);
+  }
+  show('screen-route');
+}
+$('route-back').addEventListener('click', ()=>show('screen-dashboard'));
+
+/* ===================== rescan / match ===================== */
+let rescanStream = null;
+$('btn-rescan').addEventListener('click', async ()=>{
+  $('rescan-camera-view').style.display='';
+  $('rescan-result-view').style.display='none';
+  show('screen-rescan');
+  try{
+    rescanStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'}, audio:false });
+    $('rescan-video').srcObject = rescanStream;
+  }catch(e){ toast('دسترسی به دوربین ممکن نشد.'); }
+});
+$('rescan-back').addEventListener('click', ()=>{
+  if(rescanStream){ rescanStream.getTracks().forEach(t=>t.stop()); rescanStream=null; }
+  show('screen-dashboard');
+});
+$('btn-rescan-capture').addEventListener('click', async ()=>{
+  const v = $('rescan-video');
+  if(!v.videoWidth){ toast('دوربین آماده نیست…'); return; }
+  const dataUrl = await captureFrame(v, 0.55);
+  if(rescanStream){ rescanStream.getTracks().forEach(t=>t.stop()); rescanStream=null; }
+  $('rescan-camera-view').style.display='none';
+  $('rescan-result-view').style.display='';
+  $('rescan-stop-num').textContent = '…';
+  $('rescan-matched-addr').textContent = 'در حال خواندن و تطبیق متن…';
+  try{
+    const { data } = await Tesseract.recognize(dataUrl, 'fas+eng');
+    const text = (data.text||'').trim();
+    let best = null, bestScore = 0;
+    DB.addresses.forEach(a=>{
+      const score = textSimilarity(text, a.text + ' ' + (a.formatted||''));
+      if(score > bestScore){ bestScore = score; best = a; }
+    });
+    if(best && bestScore > 0.15){
+      $('rescan-stop-num').textContent = best.stopLabel || '؟';
+      $('rescan-matched-addr').textContent = best.formatted || best.text;
+    } else {
+      $('rescan-stop-num').textContent = '❓';
+      $('rescan-matched-addr').textContent = 'این آدرس در لیست مرتب‌شده پیدا نشد.';
+    }
+  }catch(e){
+    $('rescan-stop-num').textContent = '❓';
+    $('rescan-matched-addr').textContent = 'خواندن متن ممکن نشد.';
+  }
+});
+$('btn-rescan-again').addEventListener('click', async ()=>{
+  $('rescan-result-view').style.display='none';
+  $('rescan-camera-view').style.display='';
+  try{
+    rescanStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'environment'}, audio:false });
+    $('rescan-video').srcObject = rescanStream;
+  }catch(e){ toast('دسترسی به دوربین ممکن نشد.'); }
+});
+
+/* ===================== boot ===================== */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+show('screen-login');
+</script>
+</body>
+</html>
