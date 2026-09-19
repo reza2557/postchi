@@ -101,6 +101,9 @@ p.lead{color:var(--ink-soft);font-size:.9rem;line-height:1.9;margin:0 0 18px;}
   font-weight:600;
   cursor:pointer;
   margin-bottom:12px;
+  touch-action:manipulation;
+  user-select:none;
+  -webkit-user-select:none;
 }
 .btn-primary{background:var(--primary);color:#fff;}
 .btn-primary:active{background:var(--primary-dark);}
@@ -170,6 +173,7 @@ textarea{min-height:90px;line-height:1.8;}
   background:var(--danger);
   animation:mic-pulse 1.3s infinite;
 }
+#btn-mic-toggle, #btn-rescan-mic-toggle{ touch-action:none; }
 @keyframes mic-pulse{
   0%{box-shadow:0 0 0 0 rgba(217,86,76,.55);}
   70%{box-shadow:0 0 0 22px rgba(217,86,76,0);}
@@ -365,11 +369,11 @@ a{color:var(--primary);}
       <div id="scan-voice-view">
         <div class="card" style="text-align:center;padding:34px 16px;">
           <div class="mic-circle" id="mic-visual">🎙️</div>
-          <p class="lead" id="voice-status" style="margin:16px 0 0;">دکمه را بزن و آدرس را واضح بگو</p>
+          <p class="lead" id="voice-status" style="margin:16px 0 0;">دکمه را نگه‌دار، آدرس را بگو، رها کن</p>
           <div id="voice-transcript" style="min-height:64px;font-size:1rem;line-height:2;margin-top:12px;"></div>
-          <p style="font-size:.72rem;color:var(--ink-soft);margin-top:10px;">میکروفون را نزدیک دهانت نگه دار تا صدای اطراف کمتر ضبط شود</p>
+          <p style="font-size:.72rem;color:var(--ink-soft);margin-top:10px;">بین بخش‌های آدرس (شهر، منطقه، خیابان) کمی مکث کن — خودش کاما می‌گذارد</p>
         </div>
-        <button class="btn btn-primary" id="btn-mic-toggle">🎤 شروع گفتن آدرس</button>
+        <button class="btn btn-primary" id="btn-mic-toggle">🎤 نگه‌دار و صحبت کن</button>
         <button class="btn btn-ghost" id="btn-manual-type">⌨️ به‌جای صدا، تایپ می‌کنم</button>
       </div>
 
@@ -435,11 +439,11 @@ a{color:var(--primary);}
       <div id="rescan-voice-view">
         <div class="card" style="text-align:center;padding:34px 16px;">
           <div class="mic-circle" id="rescan-mic-visual">🎙️</div>
-          <p class="lead" id="rescan-voice-status" style="margin:16px 0 0;">دکمه را بزن و آدرس را واضح بگو</p>
+          <p class="lead" id="rescan-voice-status" style="margin:16px 0 0;">دکمه را نگه‌دار، آدرس را بگو، رها کن</p>
           <div id="rescan-voice-transcript" style="min-height:64px;font-size:1rem;line-height:2;margin-top:12px;"></div>
-          <p style="font-size:.72rem;color:var(--ink-soft);margin-top:10px;">میکروفون را نزدیک دهانت نگه دار تا صدای اطراف کمتر ضبط شود</p>
+          <p style="font-size:.72rem;color:var(--ink-soft);margin-top:10px;">بین بخش‌های آدرس کمی مکث کن — خودش کاما می‌گذارد</p>
         </div>
-        <button class="btn btn-primary" id="btn-rescan-mic-toggle">🎤 شروع گفتن آدرس</button>
+        <button class="btn btn-primary" id="btn-rescan-mic-toggle">🎤 نگه‌دار و صحبت کن</button>
         <div class="link-row"><a href="#" id="link-rescan-manual">یا از لیست انتخاب کنید</a></div>
       </div>
       <div id="rescan-result-view" style="display:none;">
@@ -584,26 +588,19 @@ async function searchPlace(term, bias){
   return merged;
 }
 
-// Hierarchical geocode: narrow to locality first, then search the specific
-// place/complex name within that locality, so a search for "مجتمع رضوان"
-// inside "فارس، شیراز، صدرا، مجتمع رضوان" stays inside صدرا instead of
-// scanning the whole city/province.
+// Hierarchical geocode: drill down through each comma-separated part in
+// order — e.g. "فارس، شیراز، صدرا، مولانا سه" resolves فارس, then narrows to
+// شیراز near that, then narrows to صدرا near that, then finally searches
+// "مولانا سه" right around صدرا instead of scanning the whole province.
 async function hierarchicalGeocode(rawText, startLoc){
   const parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
   let bias = startLoc || null;
   let localityRadiusKm = 40; // wide default until we lock onto a confident locality
-  if(parts.length >= 2){
-    // Try the immediate locality first (e.g. "صدرا" in "فارس، شیراز، صدرا، ...") —
-    // a single sharp term narrows better than mashing the whole admin chain together.
-    const immediateLocality = parts[parts.length-2];
-    let localityResults = [];
-    try{ localityResults = await searchPlace(immediateLocality, bias); }catch(e){}
-    if(!localityResults.length){
-      const localityQuery = parts.slice(0, -1).join(' ');
-      try{ localityResults = await searchPlace(localityQuery, bias); }catch(e){}
-    }
-    if(localityResults.length){
-      bias = localityResults[0].coords;
+  for(let i=0; i<parts.length-1; i++){
+    let stepResults = [];
+    try{ stepResults = await searchPlace(parts[i], bias); }catch(e){}
+    if(stepResults.length){
+      bias = stepResults[0].coords;
       localityRadiusKm = 8; // once locked onto a locality, don't let other cities leak in
     }
   }
@@ -705,25 +702,30 @@ function createRecognizer(onUpdate, onEnd, onError){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SR();
   rec.lang = 'fa-IR';
-  // Single utterance per start(): Android Chrome's continuous mode is what was
-  // causing the repeated "ding" (it kept auto-restarting) and duplicated words
-  // (each restart re-reported overlapping speech). One clean utterance per tap
-  // is far more reliable — multiple taps can still build up a longer address.
-  rec.continuous = false;
+  // Push-to-talk now controls start/stop directly (finger down = listening,
+  // finger up = stop), so continuous mode is safe here — nothing auto-restarts,
+  // which is what caused the repeated "ding" before. Continuous mode also means
+  // each pause the driver makes mid-address becomes its own separate final
+  // result, which we turn into a comma below (see onresult).
+  rec.continuous = true;
   rec.interimResults = true;
   rec.maxAlternatives = 1;
-  let finalText = '';
   rec.onresult = (e)=>{
+    const finalParts = [];
     let interim = '';
-    for(let i=e.resultIndex; i<e.results.length; i++){
-      const t = e.results[i][0].transcript;
-      if(e.results[i].isFinal) finalText += t;
-      else interim += t;
+    for(let i=0; i<e.results.length; i++){
+      const t = e.results[i][0].transcript.trim();
+      if(e.results[i].isFinal){ if(t) finalParts.push(t); }
+      else interim = t;
     }
-    onUpdate(finalText, interim);
+    // Every completed (paused-after) phrase becomes its own comma-separated
+    // part — so "شیراز (مکث) صدرا (مکث) مولانا سه" becomes
+    // "شیراز، صدرا، مولانا سه", which feeds straight into the hierarchical
+    // address search below.
+    onUpdate(finalParts.join('، '), interim);
   };
   rec.onerror = (e)=>{ onError && onError(e.error); };
-  rec.onend = ()=>{ onEnd && onEnd(finalText); };
+  rec.onend = ()=>{ onEnd && onEnd(); };
   return rec;
 }
 
@@ -774,9 +776,9 @@ function resetScanUI(){
 function resetScanVoiceUI(keepText){
   scanAccumulated = keepText || '';
   $('voice-transcript').textContent = scanAccumulated;
-  $('voice-status').textContent = scanAccumulated ? 'دکمه را بزن تا ادامه بدهی' : 'دکمه را بزن و آدرس را واضح بگو';
+  $('voice-status').textContent = scanAccumulated ? 'دکمه را نگه‌دار تا ادامه بدهی' : 'دکمه را نگه‌دار، آدرس را بگو، رها کن';
   $('mic-visual').classList.remove('listening');
-  $('btn-mic-toggle').textContent = scanAccumulated ? '🎤 ادامه بده' : '🎤 شروع گفتن آدرس';
+  $('btn-mic-toggle').textContent = scanAccumulated ? '🎤 نگه‌دار: ادامه بده' : '🎤 نگه‌دار و صحبت کن';
 }
 
 $('scan-back').addEventListener('click', ()=>{
@@ -785,9 +787,28 @@ $('scan-back').addEventListener('click', ()=>{
   show('screen-dashboard');
 });
 
-$('btn-mic-toggle').addEventListener('click', ()=>{
-  if(!scanListening) startScanMic(); else stopScanMic();
-});
+// Push-to-talk: listening only while the button is physically held down —
+// finger down starts, finger up (or the finger sliding off / a cancelled
+// touch) stops. This is what lets the driver control exactly when recording
+// starts and ends, instead of the recognizer guessing from silence.
+let scanPressActive = false;
+function scanPressStart(ev){
+  ev.preventDefault();
+  if(scanPressActive) return;
+  scanPressActive = true;
+  startScanMic();
+}
+function scanPressEnd(){
+  if(!scanPressActive) return;
+  scanPressActive = false;
+  stopScanMic();
+}
+const scanMicBtn = $('btn-mic-toggle');
+scanMicBtn.addEventListener('pointerdown', scanPressStart);
+scanMicBtn.addEventListener('pointerup', scanPressEnd);
+scanMicBtn.addEventListener('pointercancel', scanPressEnd);
+scanMicBtn.addEventListener('pointerleave', scanPressEnd);
+
 function startScanMic(){
   if(!supportsSpeech()){
     toast('این مرورگر از تشخیص گفتار پشتیبانی نمی‌کند — می‌توانید تایپ کنید.');
@@ -795,32 +816,38 @@ function startScanMic(){
     return;
   }
   $('mic-visual').classList.add('listening');
-  $('voice-status').textContent = 'در حال گوش دادن…';
-  $('btn-mic-toggle').textContent = '⏹️ توقف';
+  $('voice-status').textContent = 'در حال گوش دادن… (دکمه را نگه‌دار)';
+  $('btn-mic-toggle').textContent = '🎙️ در حال ضبط…';
   scanListening = true;
   let utterance = '';
+  let finished = false;
+  const finishOnce = ()=>{
+    if(finished) return;
+    finished = true;
+    scanListening = false;
+    $('mic-visual').classList.remove('listening');
+    if(utterance.trim()){
+      scanAccumulated = joinSpeech(scanAccumulated, utterance);
+      goToScanEdit(scanAccumulated);
+    } else {
+      resetScanVoiceUI(scanAccumulated);
+    }
+  };
   scanRec = createRecognizer(
     (finalT, interim)=>{
       utterance = finalT;
       $('voice-transcript').textContent = joinSpeech(scanAccumulated, finalT + (interim ? (' '+interim) : ''));
     },
-    ()=>{ // fires once, either after natural silence or a manual stop — never restarts
-      scanListening = false;
-      $('mic-visual').classList.remove('listening');
-      scanAccumulated = joinSpeech(scanAccumulated, utterance);
-      goToScanEdit(scanAccumulated);
-    },
+    finishOnce,
     (err)=>{
-      scanListening = false;
-      $('mic-visual').classList.remove('listening');
       if(err !== 'no-speech'){ console.warn('speech error', err); toast('مشکلی در تشخیص گفتار پیش آمد.'); }
-      resetScanVoiceUI(scanAccumulated);
+      finishOnce();
     }
   );
   startRecognizer(scanRec);
 }
 function stopScanMic(){
-  if(scanRec) stopRecognizer(scanRec); // triggers the onend handler above
+  if(scanRec) stopRecognizer(scanRec); // triggers the finish handler above
 }
 function goToScanEdit(text){
   $('scan-voice-view').style.display='none';
@@ -992,13 +1019,28 @@ $('rescan-back').addEventListener('click', ()=>{
 });
 function resetRescanVoiceUI(){
   $('rescan-voice-transcript').textContent = '';
-  $('rescan-voice-status').textContent = 'دکمه را بزن و آدرس را واضح بگو';
+  $('rescan-voice-status').textContent = 'دکمه را نگه‌دار، آدرس را بگو، رها کن';
   $('rescan-mic-visual').classList.remove('listening');
-  $('btn-rescan-mic-toggle').textContent = '🎤 شروع گفتن آدرس';
+  $('btn-rescan-mic-toggle').textContent = '🎤 نگه‌دار و صحبت کن';
 }
-$('btn-rescan-mic-toggle').addEventListener('click', ()=>{
-  if(!rescanListening) startRescanMic(); else stopRescanMic();
-});
+let rescanPressActive = false;
+function rescanPressStart(ev){
+  ev.preventDefault();
+  if(rescanPressActive) return;
+  rescanPressActive = true;
+  startRescanMic();
+}
+function rescanPressEnd(){
+  if(!rescanPressActive) return;
+  rescanPressActive = false;
+  stopRescanMic();
+}
+const rescanMicBtn = $('btn-rescan-mic-toggle');
+rescanMicBtn.addEventListener('pointerdown', rescanPressStart);
+rescanMicBtn.addEventListener('pointerup', rescanPressEnd);
+rescanMicBtn.addEventListener('pointercancel', rescanPressEnd);
+rescanMicBtn.addEventListener('pointerleave', rescanPressEnd);
+
 function startRescanMic(){
   if(!supportsSpeech()){
     toast('این مرورگر از تشخیص گفتار پشتیبانی نمی‌کند — از لیست انتخاب کنید.');
@@ -1007,22 +1049,25 @@ function startRescanMic(){
   }
   $('rescan-voice-transcript').textContent = '';
   $('rescan-mic-visual').classList.add('listening');
-  $('rescan-voice-status').textContent = 'در حال گوش دادن…';
-  $('btn-rescan-mic-toggle').textContent = '⏹️ توقف';
+  $('rescan-voice-status').textContent = 'در حال گوش دادن… (دکمه را نگه‌دار)';
+  $('btn-rescan-mic-toggle').textContent = '🎙️ در حال ضبط…';
   rescanListening = true;
   let utterance = '';
+  let finished = false;
+  const finishOnce = ()=>{
+    if(finished) return;
+    finished = true;
+    rescanListening = false;
+    $('rescan-mic-visual').classList.remove('listening');
+    if(utterance.trim()) matchSpokenAddress(utterance.trim());
+    else resetRescanVoiceUI();
+  };
   rescanRec = createRecognizer(
     (finalT, interim)=>{ utterance = finalT; $('rescan-voice-transcript').textContent = finalT + (interim ? (' '+interim) : ''); },
-    ()=>{ // fires once — natural silence or manual stop — never restarts
-      rescanListening = false;
-      $('rescan-mic-visual').classList.remove('listening');
-      matchSpokenAddress(utterance.trim());
-    },
+    finishOnce,
     (err)=>{
-      rescanListening = false;
-      $('rescan-mic-visual').classList.remove('listening');
       if(err !== 'no-speech'){ console.warn('speech error', err); toast('مشکلی در تشخیص گفتار پیش آمد.'); }
-      resetRescanVoiceUI();
+      finishOnce();
     }
   );
   startRecognizer(rescanRec);
