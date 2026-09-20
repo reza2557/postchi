@@ -404,6 +404,8 @@ a{color:var(--primary);}
         </div>
         <button class="btn btn-primary" id="btn-save-next">✅ ذخیره و آدرس بعدی</button>
         <button class="btn btn-ghost" id="btn-confirm-edit">✏️ ویرایش دوباره</button>
+        <div class="link-row"><a href="#" id="link-confirm-debug">جزئیات جستجو</a></div>
+        <div class="card" style="display:none;font-size:.76rem;line-height:2;color:var(--ink-soft);white-space:pre-wrap;" id="confirm-debug-box"></div>
       </div>
 
       <div id="scan-notfound-view" style="display:none;">
@@ -411,6 +413,7 @@ a{color:var(--primary);}
           <div class="badge warn">آدرس پیدا نشد</div>
           <p style="margin:10px 0 0;font-size:.88rem;">نتوانستیم این آدرس را پیدا کنیم. متن را ویرایش کنید یا دوباره امتحان کنید.</p>
         </div>
+        <div class="card" style="font-size:.76rem;line-height:2;color:var(--ink-soft);white-space:pre-wrap;" id="search-debug-box"></div>
         <button class="btn btn-ghost" id="btn-notfound-edit">✏️ ویرایش متن آدرس</button>
       </div>
     </main>
@@ -535,19 +538,36 @@ function extractCoordsFromItem(it){
   return null;
 }
 
+// Debug trail for the last search — shown on the "not found" screen so we
+// can actually see whether Neshan/OSM were called, how many results each
+// gave, or what error stopped them, instead of guessing blindly.
+let searchDebugLog = [];
+function logDebug(line){ searchDebugLog.push(line); }
+
 async function neshanSearch(term, bias, apiKey){
   const lat = bias ? bias.lat : 29.5926;
   const lng = bias ? bias.lng : 52.5836;
   const url = `https://api.neshan.org/v1/search?term=${encodeURIComponent(term)}&lat=${lat}&lng=${lng}`;
-  const res = await fetch(url, { headers: { 'Api-Key': apiKey } });
-  if(!res.ok) throw new Error('neshan-http-'+res.status);
+  let res;
+  try{
+    res = await fetch(url, { headers: { 'Api-Key': apiKey } });
+  }catch(networkErr){
+    logDebug(`نشان («${term}»): خطای شبکه/CORS — ${networkErr.message}`);
+    throw networkErr;
+  }
+  if(!res.ok){
+    logDebug(`نشان («${term}»): خطای HTTP ${res.status}`);
+    throw new Error('neshan-http-'+res.status);
+  }
   const data = await res.json();
   const items = data.items || data.results || [];
-  return items.map(it=>({
+  const mapped = items.map(it=>({
     title: it.title || it.name || term,
     address: it.address || it.description || (it.title||''),
     coords: extractCoordsFromItem(it)
   })).filter(r=>r.coords);
+  logDebug(`نشان («${term}»): ${mapped.length} نتیجه`);
+  return mapped;
 }
 
 async function nominatimSearch(term, bias){
@@ -556,9 +576,19 @@ async function nominatimSearch(term, bias){
     const d = 0.2;
     url += `&viewbox=${bias.lng-d},${bias.lat+d},${bias.lng+d},${bias.lat-d}&bounded=0`;
   }
-  const res = await fetch(url, { headers: { 'Accept-Language':'fa' } });
-  if(!res.ok) throw new Error('nominatim-http-'+res.status);
+  let res;
+  try{
+    res = await fetch(url, { headers: { 'Accept-Language':'fa' } });
+  }catch(networkErr){
+    logDebug(`OSM («${term}»): خطای شبکه — ${networkErr.message}`);
+    throw networkErr;
+  }
+  if(!res.ok){
+    logDebug(`OSM («${term}»): خطای HTTP ${res.status}`);
+    throw new Error('nominatim-http-'+res.status);
+  }
   const data = await res.json();
+  logDebug(`OSM («${term}»): ${data.length} نتیجه`);
   return data.map(it=>({
     title: (it.display_name||'').split(',')[0],
     address: it.display_name,
@@ -575,11 +605,13 @@ async function searchPlace(term, bias){
   let neshanResults = [];
   if(key){
     try{ neshanResults = await neshanSearch(term, bias, key); }
-    catch(e){ console.warn('neshan search failed', e); }
+    catch(e){ /* logged inside neshanSearch */ }
+  } else {
+    logDebug(`نشان («${term}»): رد شد — کلید API وارد نشده`);
   }
   let nominatimResults = [];
   try{ nominatimResults = await nominatimSearch(term, bias); }
-  catch(e){ console.warn('nominatim failed', e); }
+  catch(e){ /* logged inside nominatimSearch */ }
   const merged = [...neshanResults];
   nominatimResults.forEach(nr=>{
     const dup = merged.some(m => haversineKm(m.coords, nr.coords) < 0.15);
@@ -981,10 +1013,12 @@ $('btn-find-address').addEventListener('click', async ()=>{
   }
   $('scan-edit-view').style.display='none';
   $('scan-searching-view').style.display='';
+  searchDebugLog = [];
   try{
     const results = await hierarchicalGeocode(text, DB.startLoc);
     $('scan-searching-view').style.display='none';
     if(!results.length){
+      $('search-debug-box').textContent = searchDebugLog.join('\n') || 'چیزی ثبت نشد.';
       $('scan-notfound-view').style.display='';
     } else if(results.length === 1){
       showConfirm(results[0], text);
@@ -993,6 +1027,8 @@ $('btn-find-address').addEventListener('click', async ()=>{
     }
   }catch(e){
     console.error(e);
+    searchDebugLog.push(`خطای کلی: ${e.message}`);
+    $('search-debug-box').textContent = searchDebugLog.join('\n');
     $('scan-searching-view').style.display='none';
     $('scan-notfound-view').style.display='';
   }
@@ -1025,8 +1061,15 @@ function showConfirm(result, originalText){
   $('scan-results-view').style.display='none';
   $('scan-confirm-view').style.display='';
   $('confirm-address').textContent = pendingSave.formatted || originalText;
+  $('confirm-debug-box').style.display = 'none';
+  $('confirm-debug-box').textContent = searchDebugLog.join('\n') || 'چیزی ثبت نشد.';
   renderSmallMap('confirm-map', result.coords);
 }
+$('link-confirm-debug').addEventListener('click', (e)=>{
+  e.preventDefault();
+  const box = $('confirm-debug-box');
+  box.style.display = box.style.display === 'none' ? '' : 'none';
+});
 $('btn-confirm-edit').addEventListener('click', ()=>{
   $('scan-confirm-view').style.display='none';
   $('scan-edit-view').style.display='';
