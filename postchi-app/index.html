@@ -622,31 +622,77 @@ async function geocodeWithTail(parts, startLoc, tailSize){
   return results;
 }
 
-// Hierarchical geocode: drill down through each comma-separated part in
-// order — e.g. "فارس، شیراز، صدرا، مولانا سه" resolves فارس, then narrows to
-// شیراز near that, then narrows to صدرا near that, then finally searches
-// "مولانا سه" right around صدرا instead of scanning the whole province.
-// When there's no comma at all, every space-separated word is treated as its
-// own part instead — so dictation without commas drills down exactly the
-// same way. The final place name might be one word ("خیابان X") or two
-// ("مجتمع رضوان", "مولانا سه"), so in that word-split case we try a
-// two-word tail first, then fall back to a one-word tail.
+// Groups words using common Persian address keywords (بلوار, خیابان, مجتمع,
+// ...) so a keyword plus the word right after it stay together as one part
+// ("بلوار دانش"), instead of being split apart word-by-word. Any words before
+// the first keyword each become their own part (plain locality names said
+// alone, e.g. "صدرا"). Anything left after the last keyword-part -- which
+// won't itself contain another keyword -- becomes one final part as-is, so a
+// multi-word, non-keyword name like "شورای حل اختلاف" stays together too.
+const ADDRESS_KEYWORDS = new Set([
+  'بلوار','خیابان','خ','کوچه','کوی','میدان','میدون','مجتمع','ساختمان','برج',
+  'شهرک','منطقه','فاز','پلاک','جاده','اتوبان','بزرگراه','محله','ناحیه',
+  'پاساژ','مجموعه','نبش','چهارراه','سراه'
+]);
+function splitByAddressKeywords(words){
+  const segments = [];
+  let i = 0;
+  while(i < words.length && !ADDRESS_KEYWORDS.has(normalizeFa(words[i]))){
+    segments.push(words[i]);
+    i++;
+  }
+  while(i < words.length && ADDRESS_KEYWORDS.has(normalizeFa(words[i]))){
+    let seg = [words[i]];
+    i++;
+    if(i < words.length && !ADDRESS_KEYWORDS.has(normalizeFa(words[i]))){
+      seg.push(words[i]);
+      i++;
+    }
+    segments.push(seg.join(' '));
+  }
+  if(i < words.length){
+    segments.push(words.slice(i).join(' '));
+  }
+  return segments;
+}
+
+// Hierarchical geocode, tried in layers so word order and punctuation matter
+// as little as possible:
+//  1. The whole sentence as typed/said, exactly as-is.
+//  2. Split into parts (by comma if present, otherwise by address keywords
+//     like بلوار/مجتمع/خیابان) and drill down locality-first, specific-last,
+//     trying a few tail sizes for multi-word place names.
+//  3. The same, but with the parts reversed -- so it doesn't matter whether
+//     the city or the specific place was said first.
+//  4. The whole sentence again, as a final fallback.
 async function hierarchicalGeocode(rawText, startLoc){
+  try{
+    const whole = await searchPlace(rawText, startLoc);
+    if(whole.length) return whole;
+  }catch(e){}
+
   let parts = rawText.split(/[،,]/).map(s=>s.trim()).filter(Boolean);
-  const fromWords = parts.length < 2;
-  if(fromWords){
+  if(parts.length < 2){
     const words = rawText.split(/\s+/).filter(Boolean);
-    if(words.length >= 2) parts = words;
+    if(words.length >= 2) parts = splitByAddressKeywords(words);
   }
   if(parts.length < 2){
     return await searchPlace(rawText, startLoc);
   }
-  const tailSizes = fromWords ? [2, 3, 1] : [1];
+
+  const tailSizes = [1, 2, 3];
   for(const tail of tailSizes){
     const results = await geocodeWithTail(parts, startLoc, Math.min(tail, parts.length - 1));
     if(results.length) return results;
   }
-  return await searchPlace(rawText, startLoc); // last resort: try the whole raw text
+
+  const reversedParts = [...parts].reverse();
+  for(const tail of tailSizes){
+    const results = await geocodeWithTail(reversedParts, startLoc, Math.min(tail, reversedParts.length - 1));
+    if(results.length) return results;
+  }
+
+  return await searchPlace(rawText, startLoc); // last resort
 }
 
 /* ===================== leaflet map helpers ===================== */
