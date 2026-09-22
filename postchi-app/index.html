@@ -552,11 +552,11 @@ async function neshanSearch(term, bias, apiKey){
   try{
     res = await fetch(url, { headers: { 'Api-Key': apiKey } });
   }catch(networkErr){
-    logDebug(`نشان («${term}»): خطای شبکه/CORS — ${networkErr.message}`);
+    logDebug(`نشان-جستجو («${term}»): خطای شبکه/CORS — ${networkErr.message}`);
     throw networkErr;
   }
   if(!res.ok){
-    logDebug(`نشان («${term}»): خطای HTTP ${res.status}`);
+    logDebug(`نشان-جستجو («${term}»): خطای HTTP ${res.status}`);
     throw new Error('neshan-http-'+res.status);
   }
   const data = await res.json();
@@ -566,7 +566,36 @@ async function neshanSearch(term, bias, apiKey){
     address: it.address || it.description || (it.title||''),
     coords: extractCoordsFromItem(it)
   })).filter(r=>r.coords);
-  logDebug(`نشان («${term}»): ${mapped.length} نتیجه`);
+  logDebug(`نشان-جستجو («${term}»): ${mapped.length} نتیجه`);
+  return mapped;
+}
+
+// Neshan's Search API (above) and Geocoding API are separate products with
+// separate permissions on a key — a key enabled only for "تبدیل آدرس به
+// نقطه" (address-to-point) won't work with /v1/search but will work here.
+// Tried alongside neshanSearch so whichever the key actually supports gets used.
+async function neshanGeocode(term, bias, apiKey){
+  let url = `https://api.neshan.org/v5/geocode?address=${encodeURIComponent(term)}`;
+  if(bias) url += `&bias_lat=${bias.lat}&bias_lng=${bias.lng}`;
+  let res;
+  try{
+    res = await fetch(url, { headers: { 'Api-Key': apiKey } });
+  }catch(networkErr){
+    logDebug(`نشان-جئوکد («${term}»): خطای شبکه/CORS — ${networkErr.message}`);
+    throw networkErr;
+  }
+  if(!res.ok){
+    logDebug(`نشان-جئوکد («${term}»): خطای HTTP ${res.status}`);
+    throw new Error('neshan-geocode-http-'+res.status);
+  }
+  const data = await res.json();
+  const items = data.items || data.results || (data.location ? [data] : []);
+  const mapped = items.map(it=>({
+    title: it.title || it.address || term,
+    address: it.address || it.formatted_address || (it.title||''),
+    coords: extractCoordsFromItem(it)
+  })).filter(r=>r.coords);
+  logDebug(`نشان-جئوکد («${term}»): ${mapped.length} نتیجه`);
   return mapped;
 }
 
@@ -598,14 +627,17 @@ async function nominatimSearch(term, bias){
 
 async function searchPlace(term, bias){
   const key = getNeshanKey();
-  // Always try both sources when a Neshan key is set, and merge — rather than
-  // using Neshan only when it succeeds. A Neshan call that "succeeds" but with
-  // a wrong/irrelevant match would otherwise silently block the (often more
-  // complete) Nominatim results from ever being shown.
+  // Try every source and merge — rather than stopping at the first one that
+  // "succeeds". A call that succeeds with a wrong/irrelevant match, or a key
+  // that's only enabled for one Neshan product and not another, would
+  // otherwise silently block better results from ever being shown.
   let neshanResults = [];
+  let neshanGeoResults = [];
   if(key){
     try{ neshanResults = await neshanSearch(term, bias, key); }
     catch(e){ /* logged inside neshanSearch */ }
+    try{ neshanGeoResults = await neshanGeocode(term, bias, key); }
+    catch(e){ /* logged inside neshanGeocode */ }
   } else {
     logDebug(`نشان («${term}»): رد شد — کلید API وارد نشده`);
   }
@@ -613,7 +645,7 @@ async function searchPlace(term, bias){
   try{ nominatimResults = await nominatimSearch(term, bias); }
   catch(e){ /* logged inside nominatimSearch */ }
   const merged = [...neshanResults];
-  nominatimResults.forEach(nr=>{
+  [...neshanGeoResults, ...nominatimResults].forEach(nr=>{
     const dup = merged.some(m => haversineKm(m.coords, nr.coords) < 0.15);
     if(!dup) merged.push(nr);
   });

@@ -1,4 +1,4 @@
-const CACHE = 'postchi-v14';
+const CACHE = 'postchi-v15';
 const SHELL = [
   './',
   './index.html',
