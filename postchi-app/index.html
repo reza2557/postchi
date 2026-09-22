@@ -632,8 +632,21 @@ async function geocodeWithTail(parts, startLoc, tailSize){
     let stepResults = [];
     try{ stepResults = await searchPlace(parts[i], bias); }catch(e){}
     if(stepResults.length){
-      bias = stepResults[0].coords;
-      localityRadiusKm = 8; // once locked onto a locality, don't let other cities leak in
+      let candidate = stepResults[0];
+      if(localityRadiusKm <= 8){
+        // We already confidently resolved an earlier part (e.g. صدرا) —
+        // don't let this step jump somewhere unrelated just because a
+        // same-named place in another city happened to rank first (this is
+        // exactly what sent "بلوار دانش" to Tehran instead of Sadra). Only
+        // accept a candidate that's actually close to where we already are.
+        const closeOnes = stepResults.filter(r => haversineKm(bias, r.coords) <= 30);
+        candidate = closeOnes.length ? closeOnes[0] : null;
+        if(!candidate) logDebug(`«${parts[i]}»: ${stepResults.length} نتیجه بود ولی هیچ‌کدوم نزدیک منطقه‌ی قبلی نبود — رد شد`);
+      }
+      if(candidate){
+        bias = candidate.coords;
+        localityRadiusKm = 8; // once locked onto a locality, don't let other cities leak in
+      }
     }
   }
   const specificQuery = parts.slice(splitAt).join(' ');
